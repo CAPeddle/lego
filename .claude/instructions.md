@@ -1,320 +1,659 @@
 # Claude Code Instructions for Lego Inventory Service
 
-## Project Overview
+> **Quick Start**: See [CLAUDE.md](../CLAUDE.md) for project overview, quick start commands, and critical issues summary.
 
-This is a FastAPI-based Lego inventory management service designed to run on Raspberry Pi 5. The service helps track Lego sets, parts inventory, and integrates with the Bricklink API to fetch set metadata and parts lists.
-
-**Primary Use Cases:**
-- Track owned Lego sets (assembled or disassembled)
-- Manage parts inventory with state tracking (MISSING, OWNED_LOCKED, OWNED_FREE)
-- Request missing pieces from Bricklink or other services
-- Provide inventory reports for building new sets
+This file provides comprehensive development guidelines, testing standards, deployment procedures, and security considerations for Claude Code when working in this repository.
 
 ## Architecture & Design Principles
 
-### Current Structure
-```
-app/
-├── main.py              # FastAPI app factory and lifecycle
-├── api/                 # HTTP routers and request/response models
-├── core/                # Domain models, services, business logic
-└── infrastructure/      # External integrations (DB, Bricklink API)
-```
+### Clean Architecture Philosophy
 
-### Architecture Patterns
-- **Clean Architecture**: Maintain separation between API, business logic, and infrastructure
-- **Dependency Injection**: Use FastAPI's `Depends()` for all dependencies (NOT global instances)
-- **Repository Pattern**: Database access through repository interfaces
-- **Service Layer**: Business logic lives in services, not routers
+This project follows a strict three-layer architecture to maintain separation of concerns:
 
-### Key Principles
-1. **No global state in routers** - Use dependency injection
-2. **Session management via FastAPI dependencies** - Never create sessions manually
-3. **Type everything** - Use Pydantic models and type hints throughout
-4. **Async by default** - All endpoints and I/O operations should be async
-5. **Error handling** - Custom exceptions for domain errors, proper HTTP status codes
+**API Layer** (`app/api/`)
+- HTTP request/response handling only
+- No business logic
+- Convert domain exceptions to HTTP exceptions
+- Thin controllers that delegate to services
 
-## Critical Issues to Address (Prioritized)
+**Domain Layer** (`app/core/`)
+- Business logic and rules
+- Domain models (Pydantic)
+- Service orchestration
+- Custom exceptions
+- No knowledge of HTTP or databases
 
-### 🔴 CRITICAL (Must Fix Before Production)
+**Infrastructure Layer** (`app/infrastructure/`)
+- Database access (repositories)
+- External API clients (Bricklink)
+- No business logic
+- Implements interfaces defined by domain
 
-1. **Session Management Anti-Pattern** (app/infrastructure/db.py)
-   - Current: Manually creating/closing sessions in each repository method
-   - Required: Use FastAPI dependency injection with `get_db()` generator
-   - Example:
-     ```python
-     def get_db():
-         db = SessionLocal()
-         try:
-             yield db
-         finally:
-             db.close()
-     ```
+### Key Architectural Principles
 
-2. **Global Repository Instances** (app/api/*.py)
-   - Current: Module-level repository instances
-   - Required: Inject repositories via `Depends()`
-   - Makes code testable and follows DI principles
+1. **Dependency Injection Over Global State**
+   - Use FastAPI's `Depends()` for all dependencies
+   - No module-level service/repository instances
+   - Makes code testable and maintainable
 
-3. **No Error Handling**
-   - Current: Bare except with generic 500 errors
-   - Required: Custom exception hierarchy, specific error codes
-   - Create `app/core/exceptions.py` with domain exceptions
+2. **Repository Pattern for Data Access**
+   - All database operations through repository interfaces
+   - Repositories injected via dependencies
+   - Session management handled by framework
 
-4. **No Tests**
-   - Current: No test directory or files
-   - Required: `tests/` directory with pytest
-   - Minimum: Service layer tests with mocked repositories
+3. **Service Layer for Business Logic**
+   - Services orchestrate complex operations
+   - Services use repositories and external clients
+   - Keep routers thin - delegate to services
 
-5. **Deprecated Lifespan Events** (app/main.py)
-   - Current: `@app.on_event("startup")`
-   - Required: Use `@asynccontextmanager` lifespan pattern
+4. **Explicit Error Handling**
+   - Custom exception hierarchy for domain errors
+   - Convert to appropriate HTTP status codes at API boundary
+   - Never let generic exceptions leak to users
 
-6. **Unpinned Dependencies** (requirements.txt)
-   - Current: No version constraints
-   - Required: Pin all dependencies with `==` or `~=`
+## Detailed Critical Issues Breakdown
 
-### 🟡 HIGH PRIORITY (Fix Soon)
+### 🔴 CRITICAL #1: Session Management Anti-Pattern
 
-7. **Blocking I/O in Async Endpoints**
-   - Current: Synchronous SQLAlchemy with async FastAPI
-   - Options:
-     - Use `sqlalchemy[asyncio]` with `aiosqlite`
-     - Use `run_in_executor` for sync operations
-     - Accept limitation for SQLite on Raspberry Pi
-
-8. **Stub Bricklink API Client**
-   - Current: Fake data returned
-   - Required: OAuth 1.0 implementation, real API calls
-   - Add rate limiting and retry logic
-
-9. **No Logging**
-   - Required: Structured logging with appropriate levels
-   - Use Python's `logging` module, not print statements
-
-10. **No Database Migrations**
-    - Current: `metadata.create_all()`
-    - Required: Alembic for schema versioning
-
-### 🟢 MEDIUM PRIORITY
-
-11. Add input validation (set_no format, constraints)
-12. Add docstrings to all public functions
-13. Convert to ORM models instead of Table definitions
-14. Add health check endpoint (`/health`)
-15. Use `pydantic-settings` for configuration management
-
-### ⚪ LOW PRIORITY
-
-16. Add pyproject.toml for modern Python packaging
-17. Add pre-commit hooks (ruff, mypy, black)
-18. Add CI/CD pipeline (GitHub Actions)
-19. Add CLI interface for local management
-20. Add Docker support
-
-## Coding Standards
-
-### Python Style
-- Use **ruff** for linting and formatting
-- Use **mypy** in strict mode for type checking
-- Follow PEP 8 with 100-character line length
-- Use type hints everywhere
-
-### Pydantic Models
-- All API request/response models use Pydantic
-- Enable `from_attributes = True` (formerly `orm_mode`) when needed
-- Use validators for complex validation logic
-
-### Error Handling
+**Current Problem** (app/infrastructure/db.py:52-119):
 ```python
-# Custom exceptions (app/core/exceptions.py)
+# ❌ WRONG - Manual session management
+class SqliteSetsRepository:
+    def add(self, lego_set: LegoSet):
+        db = SessionLocal()  # Creates new session
+        try:
+            # ... operations
+            db.commit()
+        finally:
+            db.close()  # Manual cleanup
+```
+
+**Why This Is Critical**:
+- Resource leaks if exceptions occur before `finally`
+- Makes testing impossible (can't inject test database)
+- Violates FastAPI best practices
+- Each method creates/destroys connections (inefficient)
+
+**Required Solution**:
+```python
+# ✅ CORRECT - Dependency injection
+def get_db():
+    """FastAPI dependency for database sessions."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+class SqliteSetsRepository:
+    def __init__(self, db: Session):
+        self.db = db  # Injected session
+
+    def add(self, lego_set: LegoSet):
+        # Use self.db - no manual session management
+        self.db.add(lego_set)
+        self.db.commit()
+
+# In router
+@router.post("/")
+async def add_set(req: Request, db: Session = Depends(get_db)):
+    repo = SqliteSetsRepository(db)
+    # ... use repo
+```
+
+**Implementation Steps**:
+1. Add `get_db()` dependency in `app/infrastructure/db.py`
+2. Refactor all repositories to accept `Session` in `__init__`
+3. Remove all `SessionLocal()` calls from repository methods
+4. Update routers to inject `db: Session = Depends(get_db)`
+5. Add tests to verify session handling
+
+### 🔴 CRITICAL #2: Global Repository Instances
+
+**Current Problem** (app/api/sets_router.py:14-17):
+```python
+# ❌ WRONG
+sets_repo = SqliteSetsRepository()  # Module-level
+inventory_repo = SqliteInventoryRepository()
+
+@router.post("/")
+async def add_set(req: Request):
+    # Uses global repo - can't test, can't inject dependencies
+    return sets_repo.add(req.set)
+```
+
+**Required Solution**:
+```python
+# ✅ CORRECT
+def get_sets_repository(db: Session = Depends(get_db)):
+    return SqliteSetsRepository(db)
+
+def get_inventory_service(
+    db: Session = Depends(get_db),
+    bricklink: BricklinkClient = Depends(get_bricklink_client)
+):
+    sets_repo = SqliteSetsRepository(db)
+    inv_repo = SqliteInventoryRepository(db)
+    return InventoryService(inv_repo, sets_repo, bricklink)
+
+@router.post("/")
+async def add_set(
+    req: Request,
+    service: InventoryService = Depends(get_inventory_service)
+):
+    return await service.add_set(req.set_no, req.assembled)
+```
+
+### 🔴 CRITICAL #3: Error Handling
+
+**Current Problem**: Generic exception handling with 500 errors only
+
+**Required Implementation**:
+
+Create `app/core/exceptions.py`:
+```python
 class LegoServiceError(Exception):
-    """Base exception for all domain errors"""
+    """Base exception for all domain errors."""
+    pass
 
 class SetNotFoundError(LegoServiceError):
-    """Raised when a set doesn't exist"""
+    """Raised when set doesn't exist in Bricklink."""
+    pass
 
 class BricklinkAPIError(LegoServiceError):
-    """Raised when Bricklink API fails"""
+    """Raised when Bricklink API request fails."""
+    pass
 
-# In routers, convert to HTTP exceptions
+class InvalidSetNumberError(LegoServiceError):
+    """Raised when set number format is invalid."""
+    pass
+
+class DatabaseError(LegoServiceError):
+    """Raised when database operation fails."""
+    pass
+```
+
+Router error handling pattern:
+```python
+from app.core.exceptions import SetNotFoundError, BricklinkAPIError
+
 @router.post("/")
-async def add_set(req: CreateSetRequest, service: InventoryService = Depends(get_service)):
+async def add_set(req: CreateSetRequest, service = Depends(get_service)):
     try:
-        result = await service.add_set(req.set_no, req.assembled)
-        return result
+        result = await service.add_set(req.set_no)
+        return {"ok": True, "set": result}
     except SetNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except BricklinkAPIError as e:
-        raise HTTPException(status_code=502, detail=f"Bricklink API error: {e}")
+        raise HTTPException(status_code=502, detail=f"External API error: {e}")
+    except InvalidSetNumberError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("Unexpected error adding set")
+        raise HTTPException(status_code=500, detail="Internal server error")
 ```
 
-### Database Patterns
-```python
-# Correct: Dependency injection
-@router.get("/")
-async def list_sets(db: Session = Depends(get_db)):
-    repo = SqliteSetsRepository(db)
-    return repo.list_all()
+### 🔴 CRITICAL #4: No Tests
 
-# Wrong: Global instances
-repo = SqliteSetsRepository()  # DON'T DO THIS
+**Minimum Viable Testing**:
 
-@router.get("/")
-async def list_sets():
-    return repo.list_all()
-```
-
-### Async Guidelines
-- All route handlers should be `async def`
-- All database operations should be async (when using async SQLAlchemy)
-- Use `asyncio.gather()` for parallel operations
-- Don't mix sync and async unnecessarily
-
-## Environment Configuration
-
-### Required Environment Variables
-- `LEGO_DB_PATH`: Path to SQLite database (default: `./data/lego_inventory.db`)
-- `BRICKLINK_CONSUMER_KEY`: OAuth consumer key
-- `BRICKLINK_CONSUMER_SECRET`: OAuth consumer secret
-- `BRICKLINK_TOKEN`: OAuth token
-- `BRICKLINK_TOKEN_SECRET`: OAuth token secret
-- `LOG_LEVEL`: Logging level (default: `INFO`)
-
-### Configuration Management
-Create `app/core/config.py`:
-```python
-from pydantic_settings import BaseSettings
-
-class Settings(BaseSettings):
-    db_path: str = "./data/lego_inventory.db"
-    bricklink_consumer_key: str
-    bricklink_consumer_secret: str
-    bricklink_token: str
-    bricklink_token_secret: str
-    log_level: str = "INFO"
-
-    class Config:
-        env_file = ".env"
-        env_prefix = "LEGO_"
-
-settings = Settings()
-```
-
-## Testing Standards
-
-### Directory Structure
+Create `tests/` structure:
 ```
 tests/
 ├── __init__.py
-├── conftest.py          # Pytest fixtures
-├── test_api/            # API integration tests
-├── test_core/           # Service and model unit tests
-└── test_infrastructure/ # Repository and client tests
+├── conftest.py          # Shared fixtures
+├── test_api/
+│   └── test_sets_router.py
+└── test_core/
+    ├── test_services.py
+    └── test_models.py
 ```
 
-### Testing Patterns
+**conftest.py** with essential fixtures:
 ```python
-# conftest.py - Shared fixtures
 import pytest
 from sqlalchemy import create_engine
-from app.infrastructure.db import Base, SessionLocal
+from sqlalchemy.orm import sessionmaker
+from app.infrastructure.db import Base
 
 @pytest.fixture
 def db_session():
+    """Provide in-memory test database."""
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
-    session = SessionLocal(bind=engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
     yield session
     session.close()
 
 @pytest.fixture
 def mock_bricklink_client():
-    # Return mock client
-    pass
+    """Mock Bricklink API client."""
+    class MockClient:
+        async def fetch_set_metadata(self, set_no):
+            return {
+                "set_no": set_no,
+                "name": f"Test Set {set_no}",
+                "year": 2024
+            }
 
-# test_core/test_services.py
-def test_add_set(db_session, mock_bricklink_client):
-    repo = SqliteSetsRepository(db_session)
-    service = InventoryService(repo, mock_bricklink_client)
-    result = await service.add_set("75192", assembled=False)
-    assert result.set_no == "75192"
+        async def fetch_set_inventory(self, set_no):
+            return [
+                {"part_no": "3001", "color_id": 1, "qty": 4},
+                {"part_no": "3002", "color_id": 2, "qty": 2}
+            ]
+    return MockClient()
 ```
 
-### Coverage Requirements
-- Minimum 80% code coverage
-- 100% coverage for service layer
-- Use `pytest-cov` for coverage reports
+**Target Coverage**: 80% overall, 100% for service layer
+
+### 🔴 CRITICAL #5: Deprecated Lifecycle Events
+
+**Current Problem** (app/main.py:11-13):
+```python
+# ❌ DEPRECATED
+@app.on_event("startup")
+def startup():
+    init_db()
+```
+
+**Required Solution**:
+```python
+# ✅ CORRECT
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    logger.info("Initializing database")
+    init_db()
+    logger.info("Application ready")
+
+    yield  # Application runs
+
+    # Shutdown
+    logger.info("Shutting down")
+    # Cleanup code here
+
+app = FastAPI(lifespan=lifespan)
+```
+
+### 🔴 CRITICAL #6: Unpinned Dependencies
+
+**Current Problem**: `requirements.txt` has no version constraints
+
+**Required Action**:
+```bash
+# Generate pinned requirements
+pip freeze > requirements.txt
+```
+
+Or use version ranges:
+```
+fastapi~=0.109.0
+uvicorn[standard]~=0.27.0
+sqlalchemy~=2.0.25
+pydantic~=2.5.0
+```
+
+## Testing Standards
+
+### Testing Philosophy
+
+- **Test behavior, not implementation** - Tests should verify outcomes, not internal details
+- **Unit tests for services** - Mock repositories and external dependencies
+- **Integration tests for repositories** - Use real in-memory database
+- **API tests for endpoints** - Use TestClient with mocked services
+
+### Test Organization
+
+```
+tests/
+├── conftest.py              # Shared fixtures
+├── test_api/                # API integration tests
+│   ├── test_sets_router.py
+│   └── test_inventory_router.py
+├── test_core/               # Unit tests
+│   ├── test_services.py
+│   ├── test_models.py
+│   └── test_validators.py
+└── test_infrastructure/     # Integration tests
+    ├── test_repositories.py
+    └── test_bricklink_client.py
+```
+
+### Testing Patterns
+
+**Service Layer Test** (most important):
+```python
+import pytest
+from app.core.services import InventoryService
+from app.core.exceptions import SetNotFoundError
+
+@pytest.mark.asyncio
+async def test_add_set_success(db_session, mock_bricklink_client):
+    # Arrange
+    sets_repo = SqliteSetsRepository(db_session)
+    inv_repo = SqliteInventoryRepository(db_session)
+    service = InventoryService(inv_repo, sets_repo, mock_bricklink_client)
+
+    # Act
+    result = await service.add_set("75192", assembled=False)
+
+    # Assert
+    assert result.set_no == "75192"
+    assert result.name == "Test Set 75192"
+    assert result.assembled is False
+
+    # Verify parts were added to inventory
+    parts = await inv_repo.list_by_set("75192")
+    assert len(parts) == 2  # Mock returns 2 parts
+
+@pytest.mark.asyncio
+async def test_add_set_not_found(db_session, mock_bricklink_client):
+    # Configure mock to return None
+    mock_bricklink_client.fetch_set_metadata = lambda x: None
+
+    service = InventoryService(..., mock_bricklink_client)
+
+    with pytest.raises(SetNotFoundError):
+        await service.add_set("99999")
+```
+
+**Repository Test**:
+```python
+def test_add_set_to_database(db_session):
+    repo = SqliteSetsRepository(db_session)
+
+    lego_set = LegoSet(
+        set_no="75192",
+        name="Millennium Falcon",
+        year=2017,
+        assembled=True
+    )
+
+    result = repo.add(lego_set)
+
+    assert result.set_no == "75192"
+    assert repo.get("75192") is not None
+```
+
+**API Test**:
+```python
+from fastapi.testclient import TestClient
+from app.main import app
+
+def test_add_set_endpoint_success(client: TestClient, monkeypatch):
+    # Mock the service dependency
+    def mock_service():
+        mock = MagicMock()
+        mock.add_set.return_value = LegoSet(set_no="75192", name="Test")
+        return mock
+
+    monkeypatch.setattr("app.api.sets_router.get_inventory_service", mock_service)
+
+    response = client.post("/sets/", json={
+        "set_no": "75192",
+        "assembled": False
+    })
+
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+
+def test_add_set_endpoint_not_found(client: TestClient, monkeypatch):
+    def mock_service():
+        mock = MagicMock()
+        mock.add_set.side_effect = SetNotFoundError("Set not found")
+        return mock
+
+    monkeypatch.setattr("app.api.sets_router.get_inventory_service", mock_service)
+
+    response = client.post("/sets/", json={"set_no": "99999"})
+
+    assert response.status_code == 404
+```
+
+### Running Tests
+
+```bash
+# Install test dependencies
+pip install pytest pytest-asyncio pytest-cov
+
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=app --cov-report=html --cov-report=term
+
+# Run specific test file
+pytest tests/test_core/test_services.py
+
+# Run tests matching pattern
+pytest -k "test_add_set"
+
+# Verbose output
+pytest -v
+```
 
 ## Bricklink API Integration
 
 ### Authentication
-- OAuth 1.0a required
-- Use `requests-oauthlib` or `httpx-oauth`
-- Store credentials in environment variables
 
-### Rate Limiting
-- Bricklink limits: Unknown, implement conservative backoff
-- Use `tenacity` for retry logic with exponential backoff
+Bricklink uses OAuth 1.0a authentication. Implementation:
 
-### API Endpoints to Implement
-1. `GET /items/{type}/{no}` - Get item metadata
-2. `GET /items/{type}/{no}/subsets` - Get set inventory
-3. Handle pagination for large inventories
+```python
+from requests_oauthlib import OAuth1Session
 
-## Git Workflow
+class BricklinkClient:
+    def __init__(self, consumer_key: str, consumer_secret: str,
+                 token: str, token_secret: str):
+        self.base_url = "https://api.bricklink.com/api/store/v1"
+        self.session = OAuth1Session(
+            consumer_key,
+            client_secret=consumer_secret,
+            resource_owner_key=token,
+            resource_owner_secret=token_secret
+        )
 
-### Commit Messages
-Follow conventional commits:
-- `feat:` New features
-- `fix:` Bug fixes
-- `refactor:` Code refactoring
-- `test:` Adding tests
-- `docs:` Documentation changes
-- `chore:` Maintenance tasks
+    async def fetch_set_metadata(self, set_no: str):
+        url = f"{self.base_url}/items/SET/{set_no}"
+        response = await self._request("GET", url)
+        return response["data"]
 
-### Branch Naming
-- Feature branches: `feature/description`
-- Bug fixes: `fix/description`
-- Claude sessions: `claude/description-sessionid`
+    async def _request(self, method: str, url: str):
+        # Add retry logic with exponential backoff
+        pass
+```
 
-## Performance Considerations
+### Rate Limiting & Retry Logic
 
-### Raspberry Pi 5 Constraints
-- Limited RAM - keep database queries efficient
-- SQLite is appropriate for single-user deployment
-- Consider read replicas if multiple users access concurrently
-- Monitor disk I/O for SD card wear
+```python
+from tenacity import retry, stop_after_attempt, wait_exponential
+
+class BricklinkClient:
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10)
+    )
+    async def _request(self, method: str, url: str):
+        response = self.session.request(method, url)
+
+        if response.status_code == 429:  # Rate limited
+            raise BricklinkAPIError("Rate limit exceeded")
+
+        if response.status_code >= 500:  # Server error
+            raise BricklinkAPIError(f"Server error: {response.status_code}")
+
+        response.raise_for_status()
+        return response.json()
+```
+
+### API Endpoints
+
+1. **Get Set Metadata**: `GET /items/SET/{set_no}`
+2. **Get Set Inventory**: `GET /items/SET/{set_no}/subsets`
+3. **Get Part Info**: `GET /items/PART/{part_no}`
+
+### Caching Strategy
+
+```python
+from functools import lru_cache
+import asyncio
+
+class BricklinkClient:
+    def __init__(self):
+        self._cache = {}
+        self._cache_ttl = 3600  # 1 hour
+
+    async def fetch_set_metadata(self, set_no: str):
+        cache_key = f"set:{set_no}"
+
+        if cache_key in self._cache:
+            cached_data, timestamp = self._cache[cache_key]
+            if time.time() - timestamp < self._cache_ttl:
+                return cached_data
+
+        data = await self._request("GET", f"/items/SET/{set_no}")
+        self._cache[cache_key] = (data, time.time())
+        return data
+```
+
+## Performance Considerations for Raspberry Pi 5
+
+### Hardware Constraints
+
+- **RAM**: 4-8GB available
+- **CPU**: 4 ARM Cortex-A76 cores @ 2.4GHz
+- **Storage**: SD card (slower I/O than SSD)
+- **Network**: 1 Gbps Ethernet or WiFi 6
 
 ### Optimization Strategies
-- Use database indexes on frequently queried columns
-- Cache Bricklink API responses (consider Redis or in-memory cache)
-- Lazy load relationships in ORM
-- Use connection pooling appropriately
+
+1. **Database Indexing**
+```python
+# Add indexes to frequently queried columns
+Index('ix_inventory_set_no', inventory_table.c.set_no)
+Index('ix_inventory_state', inventory_table.c.state)
+Index('ix_sets_set_no', sets_table.c.set_no)
+```
+
+2. **Query Optimization**
+```python
+# Use select specific columns instead of SELECT *
+stmt = select(inventory_table.c.part_no, inventory_table.c.qty)
+
+# Limit results
+stmt = stmt.limit(100)
+
+# Use joins instead of N+1 queries
+stmt = select(inventory_table).join(sets_table)
+```
+
+3. **Connection Pooling**
+```python
+engine = create_engine(
+    f"sqlite:///{settings.db_path}",
+    pool_size=5,
+    max_overflow=10,
+    pool_pre_ping=True  # Check connections before use
+)
+```
+
+4. **Async I/O for External APIs**
+```python
+# Use httpx for async HTTP requests
+import httpx
+
+async def fetch_multiple_sets(set_numbers: list[str]):
+    async with httpx.AsyncClient() as client:
+        tasks = [fetch_set(client, set_no) for set_no in set_numbers]
+        return await asyncio.gather(*tasks)
+```
+
+### SD Card Wear Management
+
+- Minimize write operations
+- Use write-ahead logging (WAL) mode for SQLite
+- Consider moving database to USB SSD if heavy writes
+
+```python
+# Enable WAL mode
+engine = create_engine(
+    f"sqlite:///{settings.db_path}",
+    connect_args={"check_same_thread": False},
+    execution_options={"isolation_level": "AUTOCOMMIT"}
+)
+
+with engine.connect() as conn:
+    conn.execute(text("PRAGMA journal_mode=WAL"))
+```
 
 ## Security Checklist
 
-- [ ] Never commit API keys or secrets
-- [ ] Use environment variables for sensitive data
-- [ ] Validate all user inputs
-- [ ] Use parameterized queries (SQLAlchemy handles this)
-- [ ] Implement rate limiting on API endpoints
-- [ ] Add authentication if exposed to internet
-- [ ] Use HTTPS in production
-- [ ] Set appropriate CORS policies
+### Environment & Secrets
 
-## Deployment
+- [ ] Never commit `.env` file
+- [ ] Use environment variables for all secrets
+- [ ] Rotate API keys periodically
+- [ ] Use `.env.example` as template (no real values)
+
+### Input Validation
+
+- [ ] Validate all user inputs with Pydantic
+- [ ] Sanitize set numbers (alphanumeric only)
+- [ ] Limit request payload sizes
+- [ ] Validate file uploads (if added)
+
+### API Security
+
+- [ ] Implement rate limiting (slowapi or middleware)
+- [ ] Add authentication if exposed to internet
+- [ ] Use HTTPS in production (reverse proxy)
+- [ ] Set appropriate CORS policies
+- [ ] Add request ID tracking for debugging
+
+### Database Security
+
+- [ ] Use parameterized queries (SQLAlchemy handles this)
+- [ ] Set appropriate file permissions on database
+- [ ] Implement regular backups
+- [ ] Validate data before persistence
+
+### Example Security Middleware
+
+```python
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    return response
+```
+
+## Deployment to Raspberry Pi
 
 ### Production Checklist
-- [ ] Pin all dependency versions
-- [ ] Set up proper logging
-- [ ] Configure database backups
-- [ ] Use systemd service or supervisor
-- [ ] Set up monitoring/alerting
-- [ ] Document deployment process
-- [ ] Test recovery procedures
 
-### Systemd Service Example
+- [ ] Pin all dependencies with exact versions
+- [ ] Set up systemd service for auto-start
+- [ ] Configure log rotation
+- [ ] Set up database backup script (cron job)
+- [ ] Configure firewall (ufw)
+- [ ] Set up reverse proxy (nginx)
+- [ ] Enable HTTPS with Let's Encrypt
+- [ ] Set up monitoring (optional: Prometheus + Grafana)
+
+### Systemd Service
+
+Create `/etc/systemd/system/lego-inventory.service`:
+
 ```ini
 [Unit]
 Description=Lego Inventory Service
@@ -325,19 +664,151 @@ Type=simple
 User=pi
 WorkingDirectory=/home/pi/lego
 Environment="PATH=/home/pi/lego/venv/bin"
-ExecStart=/home/pi/lego/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8081
+EnvironmentFile=/home/pi/lego/.env
+ExecStart=/home/pi/lego/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8081
 Restart=always
+RestartSec=10
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target
 ```
 
+Enable and start:
+```bash
+sudo systemctl enable lego-inventory
+sudo systemctl start lego-inventory
+sudo systemctl status lego-inventory
+```
+
+### Nginx Reverse Proxy
+
+```nginx
+server {
+    listen 80;
+    server_name lego.local;
+
+    location / {
+        proxy_pass http://127.0.0.1:8081;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+### Database Backup Script
+
+Create `/home/pi/lego/backup.sh`:
+
+```bash
+#!/bin/bash
+BACKUP_DIR="/home/pi/lego-backups"
+DB_PATH="/home/pi/lego/data/lego_inventory.db"
+DATE=$(date +%Y%m%d_%H%M%S)
+
+mkdir -p "$BACKUP_DIR"
+sqlite3 "$DB_PATH" ".backup '$BACKUP_DIR/lego_inventory_$DATE.db'"
+
+# Keep only last 7 days of backups
+find "$BACKUP_DIR" -name "lego_inventory_*.db" -mtime +7 -delete
+```
+
+Add to crontab:
+```bash
+# Daily backup at 2 AM
+0 2 * * * /home/pi/lego/backup.sh
+```
+
+### Log Rotation
+
+Create `/etc/logrotate.d/lego-inventory`:
+
+```
+/var/log/lego-inventory/*.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    notifempty
+    create 0640 pi pi
+    sharedscripts
+    postrotate
+        systemctl reload lego-inventory
+    endscript
+}
+```
+
+## Git Workflow
+
+### Commit Message Convention
+
+Follow [Conventional Commits](https://www.conventionalcommits.org/):
+
+- `feat:` New feature
+- `fix:` Bug fix
+- `refactor:` Code refactoring (no behavior change)
+- `test:` Adding or updating tests
+- `docs:` Documentation changes
+- `chore:` Maintenance (dependencies, config, etc.)
+- `perf:` Performance improvements
+
+Examples:
+```
+feat: Add endpoint to query missing parts for a set
+fix: Correct state transition for disassembled sets
+refactor: Extract session management to dependency
+test: Add service layer tests for add_set operation
+docs: Update README with deployment instructions
+```
+
+### Branch Naming
+
+- Feature branches: `feature/short-description`
+- Bug fixes: `fix/issue-description`
+- Claude sessions: `claude/description-sessionid`
+
+### Pre-commit Hooks (Recommended)
+
+Install pre-commit:
+```bash
+pip install pre-commit
+```
+
+Create `.pre-commit-config.yaml`:
+```yaml
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.9
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+        additional_dependencies: [pydantic, sqlalchemy]
+```
+
+Install hooks:
+```bash
+pre-commit install
+```
+
 ## References
 
-- FastAPI Docs: https://fastapi.tiangolo.com/
-- SQLAlchemy 2.0 Docs: https://docs.sqlalchemy.org/
-- Bricklink API: https://www.bricklink.com/v3/api.page
-- Pydantic: https://docs.pydantic.dev/
+- **FastAPI**: https://fastapi.tiangolo.com/
+- **SQLAlchemy 2.0**: https://docs.sqlalchemy.org/en/20/
+- **Pydantic**: https://docs.pydantic.dev/latest/
+- **Bricklink API**: https://www.bricklink.com/v3/api.page
+- **pytest**: https://docs.pytest.org/
+- **Conventional Commits**: https://www.conventionalcommits.org/
 
 ## Review History
 
@@ -346,8 +817,11 @@ WantedBy=multi-user.target
   - Highlighted need for dependency injection
   - Documented missing error handling and tests
   - Overall assessment: 6/10 - Good foundation, needs refactoring
+- **2025-11-11**: Documentation restructured
+  - Split quick reference (CLAUDE.md) from comprehensive guide
+  - Added detailed testing, deployment, and security sections
+  - Improved compatibility with Claude Web and Claude Code CLI
 
 ---
 
 **Last Updated**: 2025-11-11
-**Reviewed By**: Claude Code Review Session
