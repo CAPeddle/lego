@@ -1,3 +1,4 @@
+
 # Lego Inventory Service
 
 Minimal, modular FastAPI service to manage LEGO sets and part inventory.
