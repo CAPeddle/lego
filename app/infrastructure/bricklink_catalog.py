@@ -10,6 +10,7 @@ API Documentation: https://www.bricklink.com/v3/api.page
 from typing import List, Optional
 import logging
 from cachetools import TTLCache
+import requests
 
 from app.core.catalog_interface import (
     CatalogServiceInterface,
@@ -43,6 +44,7 @@ class BricklinkCatalogService(CatalogServiceInterface):
         self,
         oauth_client: OAuthHTTPClient,
         cache_ttl: int = 86400,  # 24 hours
+        max_cache_size: int = 100,  # Tuned for Raspberry Pi memory constraints
     ):
         """
         Initialize Bricklink catalog service.
@@ -50,15 +52,21 @@ class BricklinkCatalogService(CatalogServiceInterface):
         Args:
             oauth_client: Configured OAuth HTTP client
             cache_ttl: Cache time-to-live in seconds (default 24h)
+            max_cache_size: Maximum number of items in each cache (default 100)
         """
         self.oauth_client = oauth_client
         self.cache_ttl = cache_ttl
 
         # Cache for set metadata (keyed by set_no)
-        self.metadata_cache = TTLCache(maxsize=1000, ttl=cache_ttl)
+        # Reduced size for Raspberry Pi deployment
+        self.metadata_cache = TTLCache(maxsize=max_cache_size, ttl=cache_ttl)
 
         # Cache for set inventory (keyed by set_no)
-        self.inventory_cache = TTLCache(maxsize=1000, ttl=cache_ttl * 7)  # 7 days
+        # Inventory data is larger, so use smaller cache
+        self.inventory_cache = TTLCache(
+            maxsize=max_cache_size // 2,
+            ttl=cache_ttl * 7  # 7 days
+        )
 
     async def search_sets(self, query: str, limit: int = 20) -> List[SetSearchResult]:
         """
@@ -257,8 +265,6 @@ class BricklinkCatalogService(CatalogServiceInterface):
         Returns:
             Catalog-specific exception
         """
-        import requests
-
         if isinstance(exc, requests.exceptions.HTTPError):
             status_code = exc.response.status_code
 

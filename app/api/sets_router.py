@@ -5,10 +5,13 @@ Provides endpoints for adding sets and querying set information.
 """
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 import os
+import re
+import logging
 
 from app.core.services import InventoryService
+from app.core.models import LegoSet
 from app.core.exceptions import (
     CatalogNotFoundError,
     CatalogAuthError,
@@ -20,6 +23,7 @@ from app.infrastructure.oauth_client import OAuthHTTPClient, OAuthConfig
 from app.infrastructure.db import SqliteSetsRepository, SqliteInventoryRepository
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class CreateSetRequest(BaseModel):
@@ -27,12 +31,40 @@ class CreateSetRequest(BaseModel):
     set_no: str
     assembled: bool = False
 
+    @field_validator('set_no')
+    @classmethod
+    def validate_set_no(cls, v: str) -> str:
+        """
+        Validate set number format.
+
+        Set numbers should be alphanumeric with optional hyphens.
+        Examples: 75192, 10255-1, 21042
+        """
+        if not v:
+            raise ValueError("Set number cannot be empty")
+
+        # Allow alphanumeric and hyphens only (prevents injection attacks)
+        if not re.match(r'^[a-zA-Z0-9\-]+$', v):
+            raise ValueError(
+                "Set number must contain only letters, numbers, and hyphens"
+            )
+
+        # Reasonable length limit
+        if len(v) > 20:
+            raise ValueError("Set number is too long")
+
+        return v.strip()
+
 
 class SetResponse(BaseModel):
     """Response model for set operations."""
     ok: bool
-    set: dict
+    set: LegoSet
     parts_count: int | None = None
+
+    class Config:
+        # Allow Pydantic models as fields
+        from_attributes = True
 
 
 # Initialize OAuth config from environment
@@ -83,26 +115,37 @@ async def add_set(req: CreateSetRequest):
         lego_set = await service.add_set(req.set_no, assembled=req.assembled)
         return SetResponse(
             ok=True,
-            set=lego_set.dict(),
+            set=lego_set,
             parts_count=None,  # Could be added if we track it
         )
-    except CatalogNotFoundError as e:
-        raise HTTPException(status_code=404, detail=f"Set not found: {str(e)}")
-    except CatalogAuthError as e:
+    except CatalogNotFoundError:
         raise HTTPException(
-            status_code=401,
-            detail=f"Bricklink authentication failed: {str(e)}",
+            status_code=404,
+            detail=f"Set {req.set_no} not found in catalog"
         )
-    except CatalogRateLimitError as e:
-        raise HTTPException(
-            status_code=429,
-            detail=f"Rate limit exceeded: {str(e)}",
-        )
-    except CatalogAPIError as e:
+    except CatalogAuthError:
+        # Don't expose auth details to client
+        logger.error(f"Bricklink authentication failed for set {req.set_no}")
         raise HTTPException(
             status_code=502,
-            detail=f"Bricklink API error: {str(e)}",
+            detail="Catalog service authentication failed. Please contact administrator.",
+        )
+    except CatalogRateLimitError:
+        raise HTTPException(
+            status_code=429,
+            detail="Rate limit exceeded. Please try again later.",
+        )
+    except CatalogAPIError as e:
+        # Log full error but return generic message
+        logger.error(f"Catalog API error: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail="Catalog service temporarily unavailable",
         )
     except Exception as e:
-        # Log the error in production
-        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+        # Log full error for debugging but don't expose to client
+        logger.exception(f"Unexpected error adding set {req.set_no}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="An unexpected error occurred. Please contact support."
+        )
