@@ -223,6 +223,19 @@ class TestBricklinkCatalogService:
         assert result[0].part_no == "3001"
 
     @pytest.mark.asyncio
+    async def test_fetch_set_inventory_error(self, bricklink_service, mock_oauth_client):
+        """Test inventory fetch handles errors correctly."""
+        import requests
+
+        mock_response = Mock()
+        mock_response.status_code = 404
+        http_error = requests.exceptions.HTTPError(response=mock_response)
+        mock_oauth_client.get.side_effect = http_error
+
+        with pytest.raises(CatalogNotFoundError):
+            await bricklink_service.fetch_set_inventory("nonexistent")
+
+    @pytest.mark.asyncio
     async def test_health_check_success(self, bricklink_service, mock_oauth_client):
         """Test health check when API is accessible."""
         mock_oauth_client.get.return_value = {"data": {}}
@@ -318,3 +331,121 @@ class TestBricklinkCatalogService:
 
         assert len(bricklink_service.metadata_cache) == 0
         assert len(bricklink_service.inventory_cache) == 0
+
+    @pytest.mark.asyncio
+    async def test_search_sets_success(self, bricklink_service, mock_oauth_client):
+        """Test successful set search."""
+        mock_response = {
+            "data": [
+                {
+                    "no": "75192",
+                    "name": "Millennium Falcon",
+                    "year_released": 2017,
+                    "category_name": "Star Wars",
+                    "thumbnail_url": "https://example.com/thumb.jpg",
+                },
+                {
+                    "no": "10221",
+                    "name": "Super Star Destroyer",
+                    "year_released": 2011,
+                    "category_name": "Star Wars",
+                    "thumbnail_url": "https://example.com/thumb2.jpg",
+                },
+            ]
+        }
+        mock_oauth_client.get.return_value = mock_response
+
+        results = await bricklink_service.search_sets("Falcon")
+
+        assert len(results) == 2
+        assert all(isinstance(r, SetSearchResult) for r in results)
+        assert results[0].set_no == "75192"
+        assert results[0].name == "Millennium Falcon"
+        assert results[0].year == 2017
+        assert results[0].theme == "Star Wars"
+        assert results[0].image_url == "https://example.com/thumb.jpg"
+
+        # Verify API call
+        mock_oauth_client.get.assert_called_once()
+        call_args = mock_oauth_client.get.call_args
+        assert "items/SET" in call_args[0][0]
+        assert call_args[1]['params']['type'] == "SET"
+
+    @pytest.mark.asyncio
+    async def test_search_sets_with_limit(self, bricklink_service, mock_oauth_client):
+        """Test set search respects limit parameter."""
+        # Return more items than the limit
+        mock_response = {
+            "data": [
+                {"no": f"set{i}", "name": f"Set {i}", "year_released": 2020}
+                for i in range(50)
+            ]
+        }
+        mock_oauth_client.get.return_value = mock_response
+
+        results = await bricklink_service.search_sets("test", limit=10)
+
+        # Should only return up to the limit
+        assert len(results) == 10
+
+    @pytest.mark.asyncio
+    async def test_search_sets_empty_results(self, bricklink_service, mock_oauth_client):
+        """Test search with no results."""
+        mock_response = {"data": []}
+        mock_oauth_client.get.return_value = mock_response
+
+        results = await bricklink_service.search_sets("nonexistent")
+
+        assert len(results) == 0
+        assert results == []
+
+    @pytest.mark.asyncio
+    async def test_search_sets_error(self, bricklink_service, mock_oauth_client):
+        """Test search handles errors correctly."""
+        import requests
+
+        mock_response = Mock()
+        mock_response.status_code = 500
+        http_error = requests.exceptions.HTTPError(response=mock_response)
+        mock_oauth_client.get.side_effect = http_error
+
+        with pytest.raises(CatalogAPIError):
+            await bricklink_service.search_sets("test")
+
+    @pytest.mark.asyncio
+    async def test_convert_exception_403(self, bricklink_service, mock_oauth_client):
+        """Test that 403 errors are converted to CatalogAuthError."""
+        import requests
+
+        mock_response = Mock()
+        mock_response.status_code = 403
+        http_error = requests.exceptions.HTTPError(response=mock_response)
+        mock_oauth_client.get.side_effect = http_error
+
+        with pytest.raises(CatalogAuthError):
+            await bricklink_service.fetch_set_metadata("75192")
+
+    @pytest.mark.asyncio
+    async def test_convert_exception_500(self, bricklink_service, mock_oauth_client):
+        """Test that 500 errors are converted to CatalogAPIError."""
+        import requests
+
+        mock_response = Mock()
+        mock_response.status_code = 500
+        http_error = requests.exceptions.HTTPError(response=mock_response)
+        mock_oauth_client.get.side_effect = http_error
+
+        with pytest.raises(CatalogAPIError) as exc_info:
+            await bricklink_service.fetch_set_metadata("75192")
+
+        assert "status 500" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_convert_exception_generic(self, bricklink_service, mock_oauth_client):
+        """Test that generic exceptions are converted to CatalogAPIError."""
+        mock_oauth_client.get.side_effect = ValueError("Something went wrong")
+
+        with pytest.raises(CatalogAPIError) as exc_info:
+            await bricklink_service.fetch_set_metadata("75192")
+
+        assert "Something went wrong" in str(exc_info.value)
