@@ -94,16 +94,41 @@ app/
 
 ## Documentation
 
+- **[.claude/session-start.md](.claude/session-start.md)** - **START HERE** for new Claude sessions
+- **[research.md](research.md)** - Research and investigation log
 - **[TODO.md](TODO.md)** - Prioritized list of tasks and improvements
 - **[.claude/instructions.md](.claude/instructions.md)** - Comprehensive coding guidelines and architecture decisions
 - **[.claude/quick-reference.md](.claude/quick-reference.md)** - Code patterns and snippets
 
 ## For Developers
 
-Before starting development, read:
-1. [TODO.md](TODO.md) - See what needs to be done
-2. [.claude/instructions.md](.claude/instructions.md) - Understand the architecture and standards
-3. [.claude/quick-reference.md](.claude/quick-reference.md) - Common patterns
+### New Claude Sessions
+
+**START HERE**: Read **[.claude/session-start.md](.claude/session-start.md)** for:
+- Environment setup instructions
+- How to run tests
+- Research documentation requirements
+
+### Before Development
+
+Read in this order:
+1. **[.claude/session-start.md](.claude/session-start.md)** - Setup and workflow
+2. **[TODO.md](TODO.md)** - See what needs to be done
+3. **[.claude/instructions.md](.claude/instructions.md)** - Understand architecture and standards
+4. **[.claude/quick-reference.md](.claude/quick-reference.md)** - Common patterns
+
+### Testing
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=app --cov-report=term
+
+# Run specific test
+pytest tests/test_infrastructure/test_bricklink_catalog.py -v
+```
 
 **Next recommended tasks**:
 1. Fix session management anti-pattern
