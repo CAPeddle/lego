@@ -8,6 +8,15 @@ FastAPI-based LEGO inventory management service for Raspberry Pi 5. Tracks LEGO 
 
 **Current Status**: Initial scaffold (6/10) - clean architecture but requires critical refactoring before production use.
 
+## Session Start (New Claude Sessions)
+
+**IMPORTANT**: When starting a new Claude session, see **[.claude/session-start.md](.claude/session-start.md)** for:
+- Environment setup instructions
+- How to run tests
+- Research documentation requirements
+
+**Research Documentation**: All research and investigation MUST be documented in **[research.md](research.md)**
+
 ## Quick Start
 
 ```bash
@@ -16,6 +25,9 @@ source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Run tests (recommended first step)
+pytest
 
 # Start development server
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8081
@@ -68,6 +80,8 @@ Copy `.env.example` to `.env` and fill in credentials.
 
 ## Documentation
 
+- **[.claude/session-start.md](.claude/session-start.md)** - **START HERE** for new sessions: environment setup, test instructions, research requirements
+- **[research.md](research.md)** - Research and investigation log (REQUIRED for all sessions)
 - **[TODO.md](TODO.md)** - 23 prioritized tasks and improvements
 - **[.claude/instructions.md](.claude/instructions.md)** - Comprehensive coding guidelines, testing standards, deployment, security
 - **[.claude/quick-reference.md](.claude/quick-reference.md)** - Code patterns and snippets (DI, error handling, async, testing)
