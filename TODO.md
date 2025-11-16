@@ -1,6 +1,6 @@
 # TODO: Lego Inventory Service
 
-**Last Updated**: 2025-11-11
+**Last Updated**: 2025-11-16
 **Current Status**: Initial scaffold complete, critical refactoring needed before production
 
 ---
@@ -272,11 +272,37 @@ These improvements enhance code quality and developer experience but aren't esse
 
 ---
 
+### 17. Add Selling Feature for Parts and Sets
+- [ ] Design selling workflow and states
+  - [ ] Add `FOR_SALE` state to parts (or separate selling table)
+  - [ ] Track which parts/sets are flagged for sale
+  - [ ] Track sale price, listing date, sold date
+- [ ] Create selling API endpoints
+  - [ ] POST `/selling/parts` - Flag parts as for sale
+  - [ ] POST `/selling/sets` - Flag entire sets as for sale
+  - [ ] GET `/selling/listings` - List items for sale
+  - [ ] PATCH `/selling/{id}/sold` - Mark item as sold
+  - [ ] DELETE `/selling/{id}` - Remove from sale listings
+- [ ] Add Bricklink listing integration (optional)
+  - [ ] Research Bricklink selling API
+  - [ ] Auto-create Bricklink listings
+  - [ ] Sync sold status from Bricklink
+- [ ] Add UI/reporting for sales tracking
+  - [ ] Sales history report
+  - [ ] Profit/loss tracking
+  - [ ] Inventory turnover metrics
+
+**Files**: New `app/api/selling_router.py`, `app/core/models.py`, database schema updates
+**Estimated Effort**: 6-8 hours
+**Impact**: Enables monetization of unwanted inventory, completes inventory lifecycle
+
+---
+
 ## ⚪ LOW PRIORITY (Future Enhancements)
 
 These are nice-to-have improvements for long-term maintainability and scalability.
 
-### 17. Modernize Packaging with pyproject.toml
+### 18. Modernize Packaging with pyproject.toml
 - [ ] Create `pyproject.toml`
 - [ ] Define project metadata
 - [ ] Move dependencies from requirements.txt
@@ -289,7 +315,7 @@ These are nice-to-have improvements for long-term maintainability and scalabilit
 
 ---
 
-### 18. Add Pre-commit Hooks
+### 19. Add Pre-commit Hooks
 - [ ] Install `pre-commit` framework
 - [ ] Configure `.pre-commit-config.yaml`
 - [ ] Add ruff linting hook
@@ -304,7 +330,7 @@ These are nice-to-have improvements for long-term maintainability and scalabilit
 
 ---
 
-### 19. Set Up CI/CD Pipeline
+### 20. Set Up CI/CD Pipeline
 - [ ] Create `.github/workflows/test.yml`
 - [ ] Run tests on push and PR
 - [ ] Run linting checks
@@ -318,7 +344,7 @@ These are nice-to-have improvements for long-term maintainability and scalabilit
 
 ---
 
-### 20. Add CLI Interface
+### 21. Add CLI Interface
 - [ ] Create `app/cli/` directory
 - [ ] Use `typer` or `click` for CLI framework
 - [ ] Add commands for common operations
@@ -333,7 +359,7 @@ These are nice-to-have improvements for long-term maintainability and scalabilit
 
 ---
 
-### 21. Add Docker Support
+### 22. Add Docker Support
 - [ ] Create `Dockerfile` for service
 - [ ] Create `docker-compose.yml` for local development
 - [ ] Configure volume for database persistence
@@ -346,7 +372,7 @@ These are nice-to-have improvements for long-term maintainability and scalabilit
 
 ---
 
-### 22. Add Monitoring and Metrics
+### 23. Add Monitoring and Metrics
 - [ ] Add Prometheus metrics endpoint
 - [ ] Track request counts, latency
 - [ ] Track Bricklink API call metrics
@@ -363,10 +389,10 @@ These are nice-to-have improvements for long-term maintainability and scalabilit
 
 **Critical Tasks**: 0/6 complete
 **High Priority Tasks**: 0/5 complete
-**Medium Priority Tasks**: 0/6 complete
+**Medium Priority Tasks**: 0/7 complete
 **Low Priority Tasks**: 0/6 complete
 
-**Overall Completion**: 0/23 (0%)
+**Overall Completion**: 0/24 (0%)
 
 ---
 
