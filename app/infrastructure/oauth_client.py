@@ -124,7 +124,8 @@ class OAuthHTTPClient:
             TimeoutError: If request times out
             ValueError: If response is not valid JSON
         """
-        logger.debug(f"OAuth GET: {url} with params={params}")
+        # Don't log params - they may contain sensitive data
+        logger.debug(f"OAuth GET: {url}")
 
         # Run blocking request in thread pool to not block event loop
         loop = asyncio.get_event_loop()
