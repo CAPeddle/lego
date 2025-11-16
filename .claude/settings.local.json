@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -m pytest:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(./run_tests.sh:*)",
+      "Bash(source:*)",
+      "Bash(python -m pytest tests/ -v)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(cat:*)",
+      "Bash(pip3 list:*)",
+      "Bash(python3 -m py_compile:*)",
+      "Bash(git diff:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(chmod:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -18,7 +18,38 @@ This codebase has a good architectural foundation but requires critical refactor
 - ❌ Missing error handling (critical)
 - ❌ No tests (critical)
 
+
 ## Quick Start
+
+### Running on Windows (PowerShell)
+
+1. Create and activate venv:
+   ```powershell
+   python -m venv venv
+   .\venv\Scripts\Activate.ps1
+   ```
+
+2. Install dependencies:
+   ```powershell
+   pip install -r requirements.txt
+   ```
+
+3. Configure environment (optional):
+   ```powershell
+   Copy-Item .env.example .env
+   # Edit .env with your Bricklink API credentials
+   ```
+
+4. Start the service:
+   ```powershell
+   uvicorn app.main:app --host 0.0.0.0 --port 8081
+   ```
+
+5. Access API docs: http://localhost:8081/docs
+
+---
+
+### Running on Raspberry Pi (Linux)
 
 1. Create and activate venv:
    ```bash

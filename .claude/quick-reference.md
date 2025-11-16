@@ -1,154 +1,236 @@
-# Quick Reference Guide
+# Python FastAPI + SQLite Quick Reference
 
-Common code patterns and snippets for this project.
+Quick reference for Python web apps with FastAPI, SQLite, and mobile app backends.
 
-## Database Session Management
+## 🔴 Critical Security (Always Check)
 
-### ✅ Correct Pattern
+### Authentication & Authorization
 ```python
-# app/infrastructure/db.py
+# ✅ JWT validation (not just decoding)
+from fastapi import Depends, HTTPException
+from fastapi.security import HTTPBearer
+
+security = HTTPBearer()
+
+async def verify_token(credentials = Depends(security)):
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        return payload
+    except jwt.JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+# ✅ Password hashing
+from passlib.context import CryptContext
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+hashed = pwd_context.hash(password)
+```
+
+### SQL Injection Prevention
+```python
+# ❌ NEVER use string formatting
+query = f"SELECT * FROM users WHERE email = '{email}'"
+
+# ✅ ALWAYS use SQLAlchemy or parameterized queries
+result = await db.execute(select(User).where(User.email == email))
+```
+
+### Input Validation
+```python
+from pydantic import BaseModel, Field, field_validator
+
+class CreateRequest(BaseModel):
+    email: str = Field(..., pattern=r'^[\w\.-]+@[\w\.-]+\.\w+$')
+    set_no: str = Field(..., pattern=r"^\d{4,6}(-\d)?$")
+    
+    @field_validator("set_no")
+    @classmethod
+    def validate_set_no(cls, v: str) -> str:
+        return v.upper()
+```
+
+## 💾 Database Patterns
+
+### Session Management (Sync SQLAlchemy)
+```python
+# ✅ Correct - Dependency injection with cleanup
+from sqlalchemy.orm import Session
+from fastapi import Depends
+
 def get_db():
-    """Dependency that provides database session."""
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
 
-# app/api/sets_router.py
-from sqlalchemy.orm import Session
-from fastapi import Depends
-
-@router.post("/")
-async def add_set(
-    req: CreateSetRequest,
+@router.post("/items")
+async def create_item(
+    item: ItemCreate,
     db: Session = Depends(get_db)
 ):
-    repo = SqliteSetsRepository(db)
-    # use repo
-```
+    repo = ItemRepository(db)
+    return repo.add(item)
 
-### ❌ Wrong Pattern
-```python
-# DON'T DO THIS
-repo = SqliteSetsRepository()  # Global instance
-
+# ❌ Wrong - Manual session management
+repo = ItemRepository()  # Global instance
 def add(self):
-    db = SessionLocal()  # Manual session creation
+    db = SessionLocal()  # Manual session
     try:
-        # operations
         db.commit()
     finally:
         db.close()
 ```
 
-## Dependency Injection
-
-### ✅ Correct Pattern
-```python
-# Dependencies
-def get_sets_repository(db: Session = Depends(get_db)):
-    return SqliteSetsRepository(db)
-
-def get_inventory_service(
-    db: Session = Depends(get_db),
-    bricklink: BricklinkClient = Depends(get_bricklink_client)
-):
-    sets_repo = SqliteSetsRepository(db)
-    inv_repo = SqliteInventoryRepository(db)
-    return InventoryService(inv_repo, sets_repo, bricklink)
-
-# Router
-@router.post("/")
-async def add_set(
-    req: CreateSetRequest,
-    service: InventoryService = Depends(get_inventory_service)
-):
-    return await service.add_set(req.set_no, req.assembled)
-```
-
-## Error Handling
-
-### ✅ Correct Pattern
-```python
-# app/core/exceptions.py
-class LegoServiceError(Exception):
-    """Base exception"""
-
-class SetNotFoundError(LegoServiceError):
-    """Set not found in Bricklink"""
-
-# app/core/services.py
-async def add_set(self, set_no: str):
-    try:
-        data = await self.bricklink_client.fetch_set_metadata(set_no)
-    except aiohttp.ClientError as e:
-        raise BricklinkAPIError(f"Failed to fetch set {set_no}: {e}")
-
-    if not data:
-        raise SetNotFoundError(f"Set {set_no} not found")
-
-    return self.sets_repo.add(LegoSet(**data))
-
-# app/api/sets_router.py
-@router.post("/")
-async def add_set(req: CreateSetRequest, service = Depends(get_service)):
-    try:
-        result = await service.add_set(req.set_no)
-        return {"ok": True, "set": result}
-    except SetNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except BricklinkAPIError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except Exception as e:
-        logger.exception("Unexpected error")
-        raise HTTPException(status_code=500, detail="Internal server error")
-```
-
-## Async Patterns
-
-### Database with Async SQLAlchemy
+### Async SQLAlchemy (Optional)
 ```python
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 
-engine = create_async_engine("sqlite+aiosqlite:///./data/lego.db")
+engine = create_async_engine("sqlite+aiosqlite:///./data/app.db")
 
 async def get_db():
     async with AsyncSession(engine) as session:
         yield session
 
-# Repository
-class SqliteSetsRepository:
+class Repository:
     def __init__(self, db: AsyncSession):
         self.db = db
-
-    async def add(self, lego_set: LegoSet):
-        self.db.add(lego_set)
+    
+    async def add(self, item):
+        self.db.add(item)
         await self.db.commit()
 ```
 
-### Parallel Operations
+### Common Queries
 ```python
-import asyncio
+# Insert or Update
+stmt = select(table).where(table.c.id == item_id)
+existing = await db.execute(stmt)
+row = existing.first()
 
-async def fetch_multiple_sets(set_numbers: list[str]):
-    tasks = [fetch_set_metadata(set_no) for set_no in set_numbers]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    return results
+if row:
+    stmt = update(table).where(table.c.id == row.id).values(qty=row.qty + 1)
+else:
+    stmt = insert(table).values(id=item_id, qty=1)
+
+await db.execute(stmt)
+await db.commit()
+
+# Query with filter
+stmt = select(table).where(table.c.status == "active")
+result = await db.execute(stmt)
+return [dict(row) for row in result.fetchall()]
 ```
 
-## Testing Patterns
+## 🔧 Dependency Injection Pattern
 
-### Fixture Setup
+```python
+# Dependencies
+def get_repository(db: Session = Depends(get_db)):
+    return ItemRepository(db)
+
+def get_service(
+    db: Session = Depends(get_db),
+    api_client: APIClient = Depends(get_api_client)
+):
+    repo = ItemRepository(db)
+    return ItemService(repo, api_client)
+
+# Router
+@router.post("/")
+async def create_item(
+    req: CreateRequest,
+    service: ItemService = Depends(get_service)
+):
+    return await service.create(req.item_id)
+```
+
+## ⚡ FastAPI Best Practices
+
+### Async/Await
+```python
+# ✅ I/O operations are async
+@app.get("/items")
+async def get_items(db: Session = Depends(get_db)):
+    return await db.execute(select(Item))
+
+# ✅ CPU operations are sync
+@app.post("/calculate")
+def calculate(data: List[int]):
+    return sum(data) / len(data)
+
+# ❌ Never block async with time.sleep()
+async def bad():
+    time.sleep(5)  # Blocks event loop!
+
+# ✅ Use asyncio.sleep() or run_in_executor()
+async def good():
+    await asyncio.sleep(5)
+```
+
+### Response Models
+```python
+class ItemResponse(BaseModel):
+    id: int
+    name: str
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True  # For SQLAlchemy models
+
+@app.get("/items/{id}", response_model=ItemResponse)
+async def get_item(id: int):
+    # Automatically excludes fields not in ItemResponse
+    return item_from_db
+```
+
+## 🚨 Error Handling
+
+```python
+# Custom exceptions
+class AppError(Exception):
+    """Base exception"""
+
+class ItemNotFoundError(AppError):
+    """Item not found"""
+
+# Service layer
+async def get_item(self, item_id: str):
+    try:
+        data = await self.api_client.fetch(item_id)
+    except aiohttp.ClientError as e:
+        raise APIError(f"Failed to fetch: {e}")
+    
+    if not data:
+        raise ItemNotFoundError(f"Item {item_id} not found")
+    
+    return self.repo.add(Item(**data))
+
+# Router layer
+@router.get("/{item_id}")
+async def get_item(item_id: str, service = Depends(get_service)):
+    try:
+        result = await service.get_item(item_id)
+        return {"ok": True, "item": result}
+    except ItemNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except APIError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        logger.exception("Unexpected error")
+        raise HTTPException(status_code=500, detail="Internal error")
+```
+
+## 🧪 Testing Patterns
+
+### Fixtures
 ```python
 # tests/conftest.py
 import pytest
 from sqlalchemy import create_engine
-from app.infrastructure.db import Base, SessionLocal
 
 @pytest.fixture
 def db_session():
-    """Provide test database session."""
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     session = SessionLocal(bind=engine)
@@ -156,79 +238,60 @@ def db_session():
     session.close()
 
 @pytest.fixture
-def mock_bricklink_client():
-    """Mock Bricklink client."""
+def mock_api_client():
     class MockClient:
-        async def fetch_set_metadata(self, set_no):
-            return {"set_no": set_no, "name": "Test Set"}
-
-        async def fetch_set_inventory(self, set_no):
-            return [{"part_no": "3001", "color_id": 1, "qty": 4}]
-
+        async def fetch(self, id):
+            return {"id": id, "name": "Test"}
     return MockClient()
 ```
 
-### Service Test
+### Service Tests
 ```python
-# tests/test_core/test_services.py
-import pytest
-from app.core.services import InventoryService
-
 @pytest.mark.asyncio
-async def test_add_set_success(db_session, mock_bricklink_client):
-    sets_repo = SqliteSetsRepository(db_session)
-    inv_repo = SqliteInventoryRepository(db_session)
-    service = InventoryService(inv_repo, sets_repo, mock_bricklink_client)
-
-    result = await service.add_set("75192", assembled=False)
-
-    assert result.set_no == "75192"
-    assert result.name == "Test Set"
-    assert result.assembled is False
+async def test_create_item(db_session, mock_api_client):
+    repo = ItemRepository(db_session)
+    service = ItemService(repo, mock_api_client)
+    
+    result = await service.create_item("ABC123")
+    
+    assert result.id == "ABC123"
+    assert result.name == "Test"
 ```
 
-### API Test
+### API Tests
 ```python
-# tests/test_api/test_sets_router.py
 from fastapi.testclient import TestClient
 
-def test_add_set_endpoint(client: TestClient):
-    response = client.post(
-        "/sets/",
-        json={"set_no": "75192", "assembled": false}
-    )
+def test_create_endpoint(client: TestClient):
+    response = client.post("/items/", json={"id": "ABC123"})
     assert response.status_code == 200
     assert response.json()["ok"] is True
 ```
 
-## Configuration Pattern
+## ⚙️ Configuration
 
 ```python
-# app/core/config.py
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    db_path: str = "./data/lego_inventory.db"
-    bricklink_consumer_key: str
-    bricklink_consumer_secret: str
+    db_path: str = "./data/app.db"
+    api_key: str
+    api_secret: str
     log_level: str = "INFO"
-
+    
     class Config:
         env_file = ".env"
-        env_prefix = "LEGO_"
+        env_prefix = "APP_"
 
 settings = Settings()
 
 # Usage
-from app.core.config import settings
-
 engine = create_engine(f"sqlite:///{settings.db_path}")
 ```
 
-## Logging Pattern
+## 📝 Logging
 
 ```python
-# app/core/logger.py
 import logging
 import sys
 
@@ -239,18 +302,15 @@ def setup_logging(level: str = "INFO"):
         handlers=[logging.StreamHandler(sys.stdout)]
     )
 
-# Usage in modules
-import logging
+# In modules
 logger = logging.getLogger(__name__)
-
-logger.info("Starting operation")
-logger.error("Operation failed", exc_info=True)
+logger.info("Operation started")
+logger.error("Failed", exc_info=True)
 ```
 
-## Lifespan Pattern
+## 🚀 Application Startup
 
 ```python
-# app/main.py
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
@@ -258,76 +318,198 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Initializing database")
     init_db()
-    logger.info("Application startup complete")
-
+    
     yield
-
+    
     # Shutdown
-    logger.info("Application shutdown")
+    logger.info("Shutting down")
 
 app = FastAPI(lifespan=lifespan)
 ```
 
-## Common SQLAlchemy Patterns
+## 🔌 Raspberry Pi / Mobile Backend
 
-### Insert or Update
+### CORS for Mobile Apps
 ```python
-async def add_part(self, set_no: str, part: Part, qty: int):
-    stmt = select(inventory_table).where(
-        (inventory_table.c.set_no == set_no) &
-        (inventory_table.c.part_no == part.part_no)
+from fastapi.middleware.cors import CORSMiddleware
+
+# ✅ Development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ✅ Production - Specific origins only
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://app.example.com",
+        "http://localhost:3000"  # For development
+    ],
+    allow_credentials=True,
+)
+```
+
+### Network Binding
+```python
+import os
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "main:app",
+        host=os.getenv("HOST", "0.0.0.0"),  # External access
+        port=int(os.getenv("PORT", "8000")),
+        workers=2,  # Limited for Pi
+        reload=os.getenv("ENV") == "development"
     )
-    existing = await self.db.execute(stmt)
-    row = existing.first()
-
-    if row:
-        # Update
-        stmt = (
-            update(inventory_table)
-            .where(inventory_table.c.id == row.id)
-            .values(qty=row.qty + qty)
-        )
-    else:
-        # Insert
-        stmt = insert(inventory_table).values(
-            set_no=set_no,
-            part_no=part.part_no,
-            qty=qty
-        )
-
-    await self.db.execute(stmt)
-    await self.db.commit()
 ```
 
-### Query with Filter
+### Health Check
 ```python
-async def list_by_state(self, state: PieceState):
-    stmt = select(inventory_table).where(
-        inventory_table.c.state == state.value
+@app.get("/health")
+async def health(db: Session = Depends(get_db)):
+    try:
+        db.execute(text("SELECT 1"))
+        return {"status": "healthy", "database": "connected"}
+    except Exception:
+        raise HTTPException(status_code=503, detail="Unhealthy")
+```
+
+## 🚫 Common Pitfalls
+
+### Memory Leaks
+```python
+# ❌ Global cache grows unbounded
+global_cache = {}
+cache[id] = large_data
+
+# ✅ Use TTL cache
+from cachetools import TTLCache
+cache = TTLCache(maxsize=100, ttl=300)
+```
+
+### Database Connections
+```python
+# ❌ Manual connection not closed on error
+db = get_connection()
+result = db.query()
+return result
+
+# ✅ Dependency injection ensures cleanup
+async def endpoint(db: Session = Depends(get_db)):
+    return await db.execute(query)
+```
+
+### Blocking Operations
+```python
+# ❌ Blocks event loop
+@app.post("/process")
+async def process(file: UploadFile):
+    content = file.file.read()  # Blocking
+    heavy_processing(content)   # Blocking
+
+# ✅ Use background tasks
+from fastapi import BackgroundTasks
+
+@app.post("/process")
+async def process(file: UploadFile, bg: BackgroundTasks):
+    content = await file.read()  # Non-blocking
+    bg.add_task(heavy_processing, content)
+    return {"status": "processing"}
+```
+
+## 📱 Mobile API Patterns
+
+### Pagination
+```python
+@app.get("/items")
+async def list_items(
+    skip: int = 0,
+    limit: int = 20,
+    db: Session = Depends(get_db)
+):
+    items = await db.execute(
+        select(Item).offset(skip).limit(limit)
     )
-    result = await self.db.execute(stmt)
-    return [dict(row) for row in result.fetchall()]
+    return {"items": items.scalars().all(), "skip": skip, "limit": limit}
 ```
 
-## Pydantic Validation
-
+### File Uploads
 ```python
-from pydantic import BaseModel, Field, field_validator
+from fastapi import File, UploadFile
 
-class CreateSetRequest(BaseModel):
-    set_no: str = Field(..., pattern=r"^\d{4,6}(-\d)?$")
-    assembled: bool = False
-
-    @field_validator("set_no")
-    @classmethod
-    def validate_set_no(cls, v: str) -> str:
-        if not v:
-            raise ValueError("set_no cannot be empty")
-        return v.upper()
-
-# Usage in router automatically validates
-@router.post("/")
-async def add_set(req: CreateSetRequest):
-    # req.set_no is already validated
-    pass
+@app.post("/upload")
+async def upload(file: UploadFile = File(...)):
+    # Validate
+    if file.size > 10_000_000:  # 10MB
+        raise HTTPException(400, "File too large")
+    
+    if file.content_type not in ["image/jpeg", "image/png"]:
+        raise HTTPException(400, "Invalid file type")
+    
+    # Save
+    content = await file.read()
+    path = f"./uploads/{file.filename}"
+    with open(path, "wb") as f:
+        f.write(content)
+    
+    return {"filename": file.filename, "size": file.size}
 ```
+
+### Rate Limiting
+```python
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+
+@app.post("/login")
+@limiter.limit("5/minute")
+async def login(request: Request, creds: LoginRequest):
+    # Limited to 5 attempts per minute
+    return authenticate(creds)
+```
+
+## 📋 Pre-Deploy Checklist
+
+- [ ] All tests passing
+- [ ] No hardcoded secrets (use .env)
+- [ ] CORS configured for production
+- [ ] Error handling covers edge cases
+- [ ] Health check endpoint works
+- [ ] Logging covers key operations
+- [ ] Database migrations ready
+- [ ] API documentation accurate
+
+## 💡 Quick Commands
+
+```bash
+# Run development server
+uvicorn main:app --reload --host 0.0.0.0
+
+# Run tests
+pytest -v
+
+# Run tests with coverage
+pytest --cov=app tests/
+
+# Lint code
+black . && ruff check .
+
+# Generate requirements
+pip freeze > requirements.txt
+
+# Start with specific config
+ENV=production uvicorn main:app --host 0.0.0.0 --workers 2
+```
+
+---
+
+**Project-Specific Notes:**
+- Lego Inventory: Uses Bricklink API for metadata
+- Ski Trip: TBD - add specific patterns as needed
