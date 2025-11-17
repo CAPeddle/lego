@@ -1,7 +1,17 @@
 # TODO: Lego Inventory Service
 
-**Last Updated**: 2025-11-16
-**Current Status**: Initial scaffold complete, critical refactoring needed before production
+**Last Updated**: 2025-11-17
+**Current Status**: 67% test coverage (38 tests passing), infrastructure layer complete, critical refactoring needed before production
+
+---
+
+## 🧪 Test-Driven Development (TDD) Approach
+
+**IMPORTANT**: For each todo item below, tests should be written BEFORE implementing the feature. This ensures:
+- Features are designed for testability
+- Tests document expected behavior
+- Implementation is guided by test requirements
+- Regression prevention from day one
 
 ---
 
@@ -10,105 +20,158 @@
 These issues must be resolved before the service is production-ready. They represent fundamental design problems that affect reliability, maintainability, and testability.
 
 ### 1. Fix Session Management Anti-Pattern
-- [ ] Create `get_db()` dependency in `app/infrastructure/db.py`
+
+**TDD: Write tests FIRST** (create `tests/test_infrastructure/test_repositories.py`):
+- [ ] Test `get_db()` dependency function yields and closes session
+- [ ] Test repository with injected session (no manual SessionLocal creation)
+- [ ] Test session is closed after repository operations
+- [ ] Test concurrent requests don't share sessions
+- [ ] Test session rollback on error
+
+**Implementation tasks**:
+- [ ] Create `get_db()` dependency generator in `app/infrastructure/db.py`
 - [ ] Refactor `SqliteSetsRepository` to accept session in constructor
 - [ ] Refactor `SqliteInventoryRepository` to accept session in constructor
 - [ ] Update all repository methods to use injected session
 - [ ] Remove manual `SessionLocal()` calls from repository methods
-- [ ] Test that sessions are properly closed after requests
+- [ ] Verify all tests pass
 
 **Files**: `app/infrastructure/db.py`, `app/api/sets_router.py`, `app/api/inventory_router.py`
-**Estimated Effort**: 2-3 hours
+**Estimated Effort**: 3-4 hours (including tests)
 **Impact**: Prevents resource leaks, database connection exhaustion, and race conditions
 
 ---
 
 ### 2. Implement Dependency Injection
+
+**TDD: Write tests FIRST** (create `tests/test_api/test_dependency_injection.py`):
+- [ ] Test repository dependencies can be injected into endpoints
+- [ ] Test service dependencies can be injected into endpoints
+- [ ] Test mock repositories can be injected for testing
+- [ ] Test no global state exists (test isolation)
+
+**Implementation tasks**:
 - [ ] Remove global repository instances from `app/api/sets_router.py`
 - [ ] Remove global repository instances from `app/api/inventory_router.py`
-- [ ] Create dependency functions for repositories (e.g., `get_sets_repository()`)
-- [ ] Create dependency function for `InventoryService`
+- [ ] Create `get_sets_repository()` dependency function
+- [ ] Create `get_inventory_repository()` dependency function
+- [ ] Create `get_inventory_service()` dependency function
 - [ ] Update all router endpoints to use `Depends()`
 - [ ] Verify no global state remains in API layer
+- [ ] Verify all tests pass
 
-**Files**: `app/api/sets_router.py`, `app/api/inventory_router.py`
-**Estimated Effort**: 1-2 hours
+**Files**: `app/api/sets_router.py`, `app/api/inventory_router.py`, `app/infrastructure/db.py`
+**Estimated Effort**: 2-3 hours (including tests)
 **Impact**: Makes code testable, follows DI principles, enables mocking
 
 ---
 
 ### 3. Add Comprehensive Error Handling
-- [ ] Create `app/core/exceptions.py` with custom exception hierarchy
-  - [ ] `LegoServiceError` (base exception)
-  - [ ] `SetNotFoundError`
-  - [ ] `BricklinkAPIError`
-  - [ ] `InvalidSetNumberError`
-  - [ ] `DatabaseError`
+
+**Status**: ✅ Exception hierarchy exists (100% coverage) | ⚠️ Error handling in routers/services incomplete
+
+**TDD: Write tests FIRST** (update existing test files):
+- [ ] `tests/test_core/test_services.py`: Test service error handling
+  - [ ] Test `add_set()` with CatalogNotFoundError
+  - [ ] Test `add_set()` with CatalogAPIError
+  - [ ] Test `add_set()` with database errors
+- [ ] `tests/test_api/test_error_handling.py`: Test API error responses
+  - [ ] Test 404 response for SetNotFoundError
+  - [ ] Test 502 response for CatalogAPIError
+  - [ ] Test 400 response for InvalidSetNumberError
+  - [ ] Test consistent error response format
+
+**Implementation tasks**:
+- [x] ~~Create `app/core/exceptions.py` with custom exception hierarchy~~ (COMPLETE)
 - [ ] Add error handling in `InventoryService.add_set()`
-- [ ] Add error handling in Bricklink client methods
 - [ ] Add error handling in repository methods
+- [ ] Create exception handler in `app/api/exception_handlers.py`
 - [ ] Update routers to convert domain exceptions to HTTPException
 - [ ] Add proper HTTP status codes (404, 502, 400, etc.)
 - [ ] Add error response models with consistent format
+- [ ] Verify all tests pass
 
-**Files**: New `app/core/exceptions.py`, `app/core/services.py`, `app/api/*.py`
-**Estimated Effort**: 2-3 hours
+**Files**: `app/core/services.py`, `app/api/*.py`, new `app/api/exception_handlers.py`
+**Estimated Effort**: 2-3 hours (including tests)
 **Impact**: Better debugging, user experience, and error tracking
 
 ---
 
-### 4. Add Test Suite
-- [ ] Create `tests/` directory structure
-- [ ] Create `tests/conftest.py` with pytest fixtures
-  - [ ] `db_session` fixture (in-memory SQLite)
-  - [ ] `mock_bricklink_client` fixture
-  - [ ] `test_app` fixture
-- [ ] Add `tests/test_core/test_services.py`
-  - [ ] Test `add_set()` with valid data
-  - [ ] Test `add_set()` with Bricklink API failure
-  - [ ] Test duplicate set handling
-- [ ] Add `tests/test_infrastructure/test_repositories.py`
-  - [ ] Test `SqliteSetsRepository.add()`
+### 4. Complete Test Coverage (Current: 67%)
+
+**Status**: ✅ Infrastructure tests complete (100% coverage) | ⚠️ API/repositories untested (0% coverage)
+
+**Current Test Status**:
+- ✅ 38 tests passing
+- ✅ `tests/` directory structure exists
+- ✅ `tests/conftest.py` with OAuth fixtures
+- ✅ `tests/test_infrastructure/test_oauth_client.py` (16 tests, 100% coverage)
+- ✅ `tests/test_infrastructure/test_bricklink_catalog.py` (22 tests, 100% coverage)
+- ✅ `app/core/exceptions.py` (100% coverage from existing tests)
+- ✅ `pytest.ini` configured
+- ✅ `pytest-cov` installed
+
+**Missing Tests** (write these following TDD for other tasks):
+- [ ] Add `db_session` fixture to `tests/conftest.py` (in-memory SQLite)
+- [ ] Add `test_app` fixture to `tests/conftest.py` (FastAPI TestClient)
+- [ ] Create `tests/test_infrastructure/test_repositories.py`
+  - [ ] Test `SqliteSetsRepository.add()` and `get()`
   - [ ] Test `SqliteInventoryRepository.add_part()`
-  - [ ] Test `SqliteInventoryRepository.list()` with filters
-- [ ] Add `tests/test_api/test_sets_router.py`
+  - [ ] Test `SqliteInventoryRepository.list()` with state filters
+  - [ ] Test `SqliteInventoryRepository.update_item()`
+- [ ] Create `tests/test_core/test_services.py`
+  - [ ] Test `InventoryService.add_set()` with valid data
+  - [ ] Test `InventoryService.add_set()` with catalog failures
+  - [ ] Test part state logic (assembled vs unassembled)
+- [ ] Create `tests/test_api/test_sets_router.py`
   - [ ] Test POST `/sets/` success case
   - [ ] Test POST `/sets/` error cases
-- [ ] Add `tests/test_api/test_inventory_router.py`
+  - [ ] Test GET `/sets/{set_no}` endpoint
+- [ ] Create `tests/test_api/test_inventory_router.py`
+  - [ ] Test GET `/inventory/` without filters
   - [ ] Test GET `/inventory/` with state filter
   - [ ] Test PATCH `/inventory/` update
-- [ ] Configure pytest in `pyproject.toml` or `pytest.ini`
-- [ ] Add pytest-cov for coverage reporting
 - [ ] Achieve minimum 80% code coverage
 
-**Files**: New `tests/` directory, `requirements-dev.txt`
-**Estimated Effort**: 4-6 hours
+**Files**: Expand `tests/` directory
+**Estimated Effort**: 4-6 hours total (but spread across implementing items #1-2)
 **Impact**: Prevents regressions, enables refactoring, documents expected behavior
 
 ---
 
 ### 5. Pin Dependency Versions
-- [ ] Research compatible versions for all dependencies
-- [ ] Update `requirements.txt` with pinned versions (`==` or `~=`)
-- [ ] Test application with pinned versions
-- [ ] Document Python version requirement (3.11+)
-- [ ] Consider creating `requirements-dev.txt` for test dependencies
 
-**Files**: `requirements.txt`
-**Estimated Effort**: 30 minutes
+**Status**: ✅ COMPLETE
+
+- [x] ~~Research compatible versions for all dependencies~~
+- [x] ~~Update `requirements.txt` with pinned versions (`==`)~~
+- [x] ~~Test application with pinned versions~~ (38 tests passing)
+- [ ] Document Python version requirement (3.11+) in README
+- [ ] Consider creating `requirements-dev.txt` for test dependencies (currently in main requirements.txt)
+
+**Files**: `requirements.txt`, `README.md`
+**Estimated Effort**: 15 minutes (documentation only)
 **Impact**: Ensures reproducible builds, prevents unexpected breakage
 
 ---
 
 ### 6. Fix Deprecated Lifespan Events
+
+**TDD: Write tests FIRST** (create `tests/test_main.py`):
+- [ ] Test database is initialized on startup
+- [ ] Test app starts successfully with lifespan
+- [ ] Test cleanup logic on shutdown (if applicable)
+
+**Implementation tasks**:
 - [ ] Remove `@app.on_event("startup")` decorator
 - [ ] Create `@asynccontextmanager` lifespan function
 - [ ] Initialize database in lifespan startup
 - [ ] Add cleanup logic in lifespan shutdown (if needed)
 - [ ] Update `create_app()` to use lifespan parameter
+- [ ] Verify all tests pass
 
 **Files**: `app/main.py`
-**Estimated Effort**: 30 minutes
+**Estimated Effort**: 45 minutes (including tests)
 **Impact**: Future compatibility with FastAPI, proper resource management
 
 ---
@@ -387,21 +450,42 @@ These are nice-to-have improvements for long-term maintainability and scalabilit
 
 ## Progress Tracking
 
-**Critical Tasks**: 0/6 complete
+**Test Coverage**: 67% (38 tests passing)
+- ✅ Infrastructure layer: 100% coverage
+- ✅ Core exceptions: 100% coverage
+- ⚠️ API layer: 0% coverage (needs tests)
+- ⚠️ Repositories: Partially tested
+- ⚠️ Core services: Needs tests
+
+**Critical Tasks**: 1.5/6 complete
+- ✅ Item #5: Dependency versions pinned
+- ✅ Item #3: Exception hierarchy created (error handling incomplete)
+- ✅ Item #4: Test infrastructure established (API/repository tests needed)
+- ⚠️ Items #1-2, #6: Need implementation
+
 **High Priority Tasks**: 0/5 complete
 **Medium Priority Tasks**: 0/7 complete
 **Low Priority Tasks**: 0/6 complete
 
-**Overall Completion**: 0/24 (0%)
+**Overall Completion**: 1.5/24 (6.25%)
 
 ---
 
 ## Notes
 
+- **TDD Approach**: Write tests FIRST for each feature before implementing
 - Items can be reordered based on actual development priorities
-- Estimated efforts are rough guidelines for a single developer
-- Some tasks have dependencies (e.g., tests require DI to be fixed first)
+- Estimated efforts are rough guidelines for a single developer and include test writing time
+- Some tasks have dependencies (e.g., API tests require DI to be fixed first)
 - Consider tackling critical tasks in order for maximum impact
 - Review and update this TODO regularly as work progresses
+- Current test coverage: 67% (target: 80%+)
 
 **Next recommended task**: Start with item #1 (Session Management) as it's foundational for items #2-4.
+
+**TDD Workflow**:
+1. Write failing tests that define expected behavior
+2. Run tests to confirm they fail (`pytest -v`)
+3. Implement minimal code to make tests pass
+4. Refactor while keeping tests green
+5. Commit with tests and implementation together

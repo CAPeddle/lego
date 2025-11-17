@@ -6,7 +6,7 @@
 
 FastAPI-based LEGO inventory management service for Raspberry Pi 5. Tracks LEGO sets, parts inventory, and integrates with Bricklink API.
 
-**Current Status**: Initial scaffold (6/10) - clean architecture but requires critical refactoring before production use.
+**Current Status**: Initial scaffold (6.5/10) - clean architecture with 67% test coverage, requires critical refactoring before production use.
 
 ## Session Start (New Claude Sessions)
 
@@ -48,15 +48,15 @@ Three-layer clean architecture:
 
 🔴 **Global Repository Instances** - Module-level instances → Inject via `Depends()`
 
-🔴 **No Error Handling** - Generic 500 errors → Create custom exception hierarchy in `app/core/exceptions.py`
+🟡 **Error Handling Incomplete** - Exception hierarchy exists (100% coverage) → Add error handling to routers/services
 
-🔴 **No Tests** - No test directory → Add `tests/` with pytest
+🟢 **Test Coverage: 67%** - 38 tests passing, infrastructure layer complete → Add API/repository tests (target: 80%+)
 
 🔴 **Deprecated Lifecycle Events** - Using `@app.on_event()` → Migrate to `@asynccontextmanager` lifespan
 
-🔴 **Unpinned Dependencies** - No version constraints → Pin all dependencies
+🟢 **Dependencies Pinned** - All versions locked with `==` in requirements.txt
 
-See [TODO.md](TODO.md) for complete prioritized task list (23 items).
+See [TODO.md](TODO.md) for complete prioritized task list (23 items, 1.5 complete).
 
 ## Coding Standards
 
