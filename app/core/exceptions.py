@@ -1,68 +1,22 @@
-"""
-Custom exception hierarchy for the LEGO inventory service.
-
-All domain exceptions inherit from LegoServiceError.
-Convert these to HTTPException in the API layer.
-"""
-
-
 class LegoServiceError(Exception):
-    """Base exception for all LEGO service errors."""
-    pass
+    """Base exception for domain errors."""
 
 
-# Catalog Service Exceptions
-class CatalogServiceError(LegoServiceError):
-    """Base exception for catalog service errors."""
-    pass
-
-
-class CatalogAPIError(CatalogServiceError):
-    """Catalog API is unavailable or returned an error."""
-    pass
-
-
-class CatalogAuthError(CatalogServiceError):
-    """Authentication with catalog service failed."""
-    pass
-
-
-class CatalogNotFoundError(CatalogServiceError):
-    """Requested resource not found in catalog."""
-    pass
-
-
-class CatalogRateLimitError(CatalogServiceError):
-    """Catalog service rate limit exceeded."""
-    pass
-
-
-class CatalogTimeoutError(CatalogServiceError):
-    """Catalog service request timed out."""
-    pass
-
-
-# Domain Exceptions
 class SetNotFoundError(LegoServiceError):
-    """Set not found in local database."""
-    pass
+    """Raised when a requested set cannot be found."""
+
+
+class BricklinkAPIError(LegoServiceError):
+    """Raised when Bricklink API interaction fails."""
 
 
 class InvalidSetNumberError(LegoServiceError):
-    """Set number format is invalid."""
-    pass
+    """Raised when a set number format is invalid."""
 
 
 class DatabaseError(LegoServiceError):
-    """Database operation failed."""
-    pass
+    """Raised for database persistence/retrieval issues."""
 
 
-class PartNotFoundError(LegoServiceError):
-    """Part not found in inventory."""
-    pass
-
-
-class InvalidStateTransitionError(LegoServiceError):
-    """Invalid state transition requested."""
-    pass
+class InventoryItemNotFoundError(LegoServiceError):
+    """Raised when an inventory item update targets a non-existent record."""

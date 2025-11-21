@@ -1,32 +1,41 @@
-from fastapi import FastAPI, status
-from datetime import datetime
+import logging
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, APIRouter, Depends
 from app.api import sets_router, inventory_router
-from app.infrastructure.db import init_db, get_engine, Base
+from app.infrastructure.db import init_db
+from app.infrastructure.db import get_db
+
+logger = logging.getLogger("lego")
+
+health_router = APIRouter()
+
+@health_router.get("/health")
+async def health_check(db=Depends(get_db)):
+    try:
+        # Simple connectivity check
+        next(db.execute("SELECT 1"))  # type: ignore
+        return {"status": "ok"}
+    except Exception:
+        return {"status": "error"}
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Starting application - initializing database")
+    init_db()
+    logger.info("Database initialized")
+    yield
+    logger.info("Shutdown complete")
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Lego Inventory Service")
-
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    )
+    app = FastAPI(title="Lego Inventory Service", lifespan=lifespan)
     app.include_router(sets_router.router, prefix="/sets", tags=["sets"])
     app.include_router(inventory_router.router, prefix="/inventory", tags=["inventory"])
-
-    @app.get("/health", status_code=status.HTTP_200_OK, tags=["health"])
-    async def health_check():
-        """
-        Health check endpoint for monitoring.
-
-        Returns service status and timestamp.
-        Can be extended to check database and external service connectivity.
-        """
-        return {
-            "status": "healthy",
-            "timestamp": datetime.utcnow().isoformat(),
-            "service": "lego-inventory"
-        }
-
-    @app.on_event("startup")
-    async def startup():
-        init_db()
-
+    app.include_router(health_router, tags=["health"])
+    app.include_router(health_router, tags=["health"])
     return app
 
 app = create_app()
