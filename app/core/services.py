@@ -12,10 +12,15 @@ from typing import List
 
 
 class InventoryService:
-    def __init__(self, inventory_repo, sets_repo, bricklink_client):
-        self.inventory_repo = inventory_repo
-        self.sets_repo = sets_repo
-        self.bricklink_client = bricklink_client
+    def __init__(
+        self,
+        inventory_repo,
+        sets_repo,
+        bricklink_client,
+    ) -> None:
+        self.inventory_repo = inventory_repo  # SqliteInventoryRepository
+        self.sets_repo = sets_repo            # SqliteSetsRepository
+        self.bricklink_client = bricklink_client  # BricklinkClient
 
     async def add_set(self, set_no: str, assembled: bool = False) -> LegoSet:
         try:
@@ -34,7 +39,6 @@ class InventoryService:
         lego_set = LegoSet(
             set_no=set_no, name=set_meta.get("name", ""), assembled=assembled
         )
->>>>>>> a18acbd (refactor: apply DI, session mgmt, exceptions, health endpoint, tests, pinned deps)
         self.sets_repo.add(lego_set)
         state = PieceState.OWNED_LOCKED if assembled else PieceState.OWNED_FREE
         for p in parts:

@@ -23,6 +23,7 @@ class InventoryItemResponse(BaseModel):
 
 class InventoryListResponse(BaseModel):
     items: list[InventoryItemResponse]
+    count: int
 
 
 class UpdateInventoryResponse(BaseModel):

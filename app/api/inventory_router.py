@@ -4,7 +4,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from app.infrastructure.db import SqliteInventoryRepository, get_db
 from app.core.states import PieceState
-from app.api.schemas import InventoryItemResponse, UpdateInventoryResponse
+from app.api.schemas import (
+    InventoryItemResponse,
+    UpdateInventoryResponse,
+    InventoryListResponse,
+)
 
 router = APIRouter()
 def get_inventory_repo(db: Session = Depends(get_db)) -> SqliteInventoryRepository:
@@ -16,13 +20,14 @@ class UpdateStateRequest(BaseModel):
     qty: int = Field(..., gt=0, le=10000)
     state: PieceState
 
-@router.get("/", response_model=List[InventoryItemResponse])
+@router.get("/", response_model=InventoryListResponse)
 async def list_inventory(
     state: PieceState = Query(None),
     repo: SqliteInventoryRepository = Depends(get_inventory_repo),
 ):
     rows = repo.list(state=state)
-    return [InventoryItemResponse(**r) for r in rows]
+    items = [InventoryItemResponse(**r) for r in rows]
+    return {"items": items, "count": len(items)}
 
 @router.patch("/", response_model=UpdateInventoryResponse)
 async def update_item(
