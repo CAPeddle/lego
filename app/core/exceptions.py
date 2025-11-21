@@ -20,3 +20,28 @@ class DatabaseError(LegoServiceError):
 
 class InventoryItemNotFoundError(LegoServiceError):
     """Raised when an inventory item update targets a non-existent record."""
+
+
+# Catalog-related exceptions (used by legacy infrastructure tests)
+class CatalogServiceError(LegoServiceError):
+    """Base exception for external catalog service errors."""
+
+
+class CatalogAPIError(CatalogServiceError):
+    """External catalog API error or unexpected response."""
+
+
+class CatalogAuthError(CatalogServiceError):
+    """Authentication with catalog service failed."""
+
+
+class CatalogNotFoundError(CatalogServiceError):
+    """Resource not found in external catalog."""
+
+
+class CatalogRateLimitError(CatalogServiceError):
+    """External catalog rate limit exceeded."""
+
+
+class CatalogTimeoutError(CatalogServiceError):
+    """External catalog request timed out."""
