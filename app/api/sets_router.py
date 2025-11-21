@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from app.core.services import InventoryService
 from app.core.exceptions import SetNotFoundError, BricklinkAPIError
+from app.api.schemas import CreateSetResponse, LegoSetResponse
 from app.infrastructure.bricklink_client import BricklinkClient
 from app.infrastructure.db import (
     SqliteSetsRepository,
