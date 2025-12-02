@@ -1,6 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
+
 from app.core.states import PieceState
+
 
 @pytest.mark.asyncio
 async def test_list_inventory_initial(client: TestClient):
@@ -10,6 +12,7 @@ async def test_list_inventory_initial(client: TestClient):
     data = resp.json()
     assert data["count"] == 0
     assert data["items"] == []
+
 
 @pytest.mark.asyncio
 async def test_add_set_and_list_inventory(client: TestClient):
@@ -22,6 +25,7 @@ async def test_add_set_and_list_inventory(client: TestClient):
     assert data["count"] == 2
     states = {item["state"] for item in data["items"]}
     assert states == {PieceState.OWNED_FREE}
+
 
 @pytest.mark.asyncio
 async def test_update_inventory_item(client: TestClient):

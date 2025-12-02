@@ -5,10 +5,10 @@ The InventoryService orchestrates operations across repositories and
 external catalog services (Bricklink, Rebrickable, etc.).
 """
 
+
+from app.core.exceptions import BricklinkAPIError, SetNotFoundError
 from app.core.models import LegoSet, Part
 from app.core.states import PieceState
-from app.core.exceptions import SetNotFoundError, BricklinkAPIError
-from typing import List
 
 
 class InventoryService:
@@ -19,7 +19,7 @@ class InventoryService:
         bricklink_client,
     ) -> None:
         self.inventory_repo = inventory_repo  # SqliteInventoryRepository
-        self.sets_repo = sets_repo            # SqliteSetsRepository
+        self.sets_repo = sets_repo  # SqliteSetsRepository
         self.bricklink_client = bricklink_client  # BricklinkClient
 
     async def add_set(self, set_no: str, assembled: bool = False) -> LegoSet:

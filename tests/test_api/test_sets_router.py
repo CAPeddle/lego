@@ -1,5 +1,5 @@
 import pytest
-from fastapi.testclient import TestClient
+
 
 @pytest.mark.asyncio
 async def test_create_set_endpoint(client):
@@ -8,6 +8,7 @@ async def test_create_set_endpoint(client):
     body = response.json()
     assert body["ok"] is True
     assert body["set"]["set_no"] == "7777"
+
 
 @pytest.mark.asyncio
 async def test_create_set_not_found(client):

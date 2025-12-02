@@ -1,8 +1,10 @@
 import pytest
-from app.core.services import InventoryService
+
 from app.core.exceptions import SetNotFoundError
-from app.infrastructure.db import SqliteSetsRepository, SqliteInventoryRepository
+from app.core.services import InventoryService
 from app.core.states import PieceState
+from app.infrastructure.db import SqliteInventoryRepository, SqliteSetsRepository
+
 
 @pytest.mark.asyncio
 async def test_add_set_success(db_session, mock_bricklink_client):
@@ -17,6 +19,7 @@ async def test_add_set_success(db_session, mock_bricklink_client):
     items = inv_repo.list()
     assert len(items) == 2
     assert all(i["state"] == PieceState.OWNED_FREE.value for i in items)
+
 
 @pytest.mark.asyncio
 async def test_add_set_not_found(db_session, mock_bricklink_client):

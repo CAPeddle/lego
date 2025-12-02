@@ -1,18 +1,19 @@
 import os
-from typing import Optional, List
+
 from sqlalchemy import (
-    create_engine,
-    Column,
-    Integer,
-    String,
     Boolean,
-    MetaData,
-    Table,
+    Column,
     Index,
+    Integer,
+    MetaData,
+    String,
+    Table,
+    create_engine,
     select,
     update,
 )
-from sqlalchemy.orm import registry, sessionmaker, Session
+from sqlalchemy.orm import Session, registry, sessionmaker
+
 from app.core.models import LegoSet, Part
 from app.core.states import PieceState
 
@@ -56,8 +57,10 @@ inventory_table = Table(
     Index("ix_inventory_part_color", "part_no", "color_id"),
 )
 
+
 def init_db():
     metadata.create_all(engine)
+
 
 def get_db():
     """FastAPI dependency to provide a scoped session."""
@@ -67,7 +70,9 @@ def get_db():
     finally:
         db.close()
 
+
 # Simple repository implementations
+
 
 class SqliteSetsRepository:
     def __init__(self, db: Session):
@@ -83,11 +88,12 @@ class SqliteSetsRepository:
         )
         self.db.commit()
 
-    def get(self, set_no: str) -> Optional[dict]:
+    def get(self, set_no: str) -> dict | None:
         r = self.db.execute(
             select(sets_table).where(sets_table.c.set_no == set_no)
         ).first()
         return dict(r._mapping) if r else None
+
 
 class SqliteInventoryRepository:
     def __init__(self, db: Session):
@@ -125,7 +131,7 @@ class SqliteInventoryRepository:
             )
         self.db.commit()
 
-    def list(self, state: Optional[PieceState] = None) -> List[dict]:
+    def list(self, state: PieceState | None = None) -> list[dict]:
         if state:
             rows = self.db.execute(
                 select(inventory_table).where(inventory_table.c.state == state.value)

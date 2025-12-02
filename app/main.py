@@ -1,13 +1,15 @@
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, APIRouter, Depends
-from app.api import sets_router, inventory_router
-from app.infrastructure.db import init_db
-from app.infrastructure.db import get_db
+
+from fastapi import APIRouter, Depends, FastAPI
+
+from app.api import inventory_router, sets_router
+from app.infrastructure.db import get_db, init_db
 
 logger = logging.getLogger("lego")
 
 health_router = APIRouter()
+
 
 @health_router.get("/health")
 async def health_check(db=Depends(get_db)):
@@ -18,6 +20,7 @@ async def health_check(db=Depends(get_db)):
     except Exception:
         return {"status": "error"}
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting application - initializing database")
@@ -25,6 +28,7 @@ async def lifespan(app: FastAPI):
     logger.info("Database initialized")
     yield
     logger.info("Shutdown complete")
+
 
 def create_app() -> FastAPI:
     logging.basicConfig(
@@ -37,5 +41,6 @@ def create_app() -> FastAPI:
     app.include_router(health_router, tags=["health"])
     app.include_router(health_router, tags=["health"])
     return app
+
 
 app = create_app()

@@ -4,12 +4,11 @@ Unit tests for Bricklink catalog service implementation.
 Tests the Bricklink-specific catalog service that uses OAuth client.
 """
 
-import pytest
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import AsyncMock, Mock
 
-from app.infrastructure.bricklink_catalog import BricklinkCatalogService
-from app.infrastructure.oauth_client import OAuthHTTPClient
-from app.core.catalog_interface import SetSearchResult, SetMetadata, InventoryPart
+import pytest
+
+from app.core.catalog_interface import InventoryPart, SetMetadata, SetSearchResult
 from app.core.exceptions import (
     CatalogAPIError,
     CatalogAuthError,
@@ -17,6 +16,8 @@ from app.core.exceptions import (
     CatalogRateLimitError,
     CatalogTimeoutError,
 )
+from app.infrastructure.bricklink_catalog import BricklinkCatalogService
+from app.infrastructure.oauth_client import OAuthHTTPClient
 
 
 @pytest.fixture
@@ -49,7 +50,9 @@ class TestBricklinkCatalogService:
         assert len(service.inventory_cache) == 0
 
     @pytest.mark.asyncio
-    async def test_fetch_set_metadata_success(self, bricklink_service, mock_oauth_client):
+    async def test_fetch_set_metadata_success(
+        self, bricklink_service, mock_oauth_client
+    ):
         """Test successful metadata fetch."""
         mock_response = {
             "data": {
@@ -80,7 +83,9 @@ class TestBricklinkCatalogService:
         assert "items/SET/75192" in call_args[0][0]
 
     @pytest.mark.asyncio
-    async def test_fetch_set_metadata_cached(self, bricklink_service, mock_oauth_client):
+    async def test_fetch_set_metadata_cached(
+        self, bricklink_service, mock_oauth_client
+    ):
         """Test that metadata is cached on second request."""
         mock_response = {
             "data": {
@@ -104,7 +109,9 @@ class TestBricklinkCatalogService:
         assert result1.name == result2.name
 
     @pytest.mark.asyncio
-    async def test_fetch_set_inventory_success(self, bricklink_service, mock_oauth_client):
+    async def test_fetch_set_inventory_success(
+        self, bricklink_service, mock_oauth_client
+    ):
         """Test successful inventory fetch."""
         mock_response = {
             "data": [
@@ -158,10 +165,12 @@ class TestBricklinkCatalogService:
         mock_oauth_client.get.assert_called_once()
         call_args = mock_oauth_client.get.call_args
         assert "items/SET/75192/subsets" in call_args[0][0]
-        assert call_args[1]['params']['break_minifigs'] == "true"
+        assert call_args[1]["params"]["break_minifigs"] == "true"
 
     @pytest.mark.asyncio
-    async def test_fetch_set_inventory_cached(self, bricklink_service, mock_oauth_client):
+    async def test_fetch_set_inventory_cached(
+        self, bricklink_service, mock_oauth_client
+    ):
         """Test that inventory is cached."""
         mock_response = {
             "data": [
@@ -189,7 +198,9 @@ class TestBricklinkCatalogService:
         assert len(result1) == len(result2)
 
     @pytest.mark.asyncio
-    async def test_fetch_set_inventory_filters_non_parts(self, bricklink_service, mock_oauth_client):
+    async def test_fetch_set_inventory_filters_non_parts(
+        self, bricklink_service, mock_oauth_client
+    ):
         """Test that non-PART items are filtered out."""
         mock_response = {
             "data": [
@@ -223,7 +234,9 @@ class TestBricklinkCatalogService:
         assert result[0].part_no == "3001"
 
     @pytest.mark.asyncio
-    async def test_fetch_set_inventory_error(self, bricklink_service, mock_oauth_client):
+    async def test_fetch_set_inventory_error(
+        self, bricklink_service, mock_oauth_client
+    ):
         """Test inventory fetch handles errors correctly."""
         import requests
 
@@ -294,7 +307,9 @@ class TestBricklinkCatalogService:
             await bricklink_service.fetch_set_metadata("75192")
 
     @pytest.mark.asyncio
-    async def test_convert_exception_timeout(self, bricklink_service, mock_oauth_client):
+    async def test_convert_exception_timeout(
+        self, bricklink_service, mock_oauth_client
+    ):
         """Test that timeout errors are converted to CatalogTimeoutError."""
         import requests
 
@@ -305,7 +320,9 @@ class TestBricklinkCatalogService:
             await bricklink_service.fetch_set_metadata("75192")
 
     @pytest.mark.asyncio
-    async def test_convert_exception_connection(self, bricklink_service, mock_oauth_client):
+    async def test_convert_exception_connection(
+        self, bricklink_service, mock_oauth_client
+    ):
         """Test that connection errors are converted to CatalogAPIError."""
         import requests
 
@@ -369,7 +386,7 @@ class TestBricklinkCatalogService:
         mock_oauth_client.get.assert_called_once()
         call_args = mock_oauth_client.get.call_args
         assert "items/SET" in call_args[0][0]
-        assert call_args[1]['params']['type'] == "SET"
+        assert call_args[1]["params"]["type"] == "SET"
 
     @pytest.mark.asyncio
     async def test_search_sets_with_limit(self, bricklink_service, mock_oauth_client):
@@ -389,7 +406,9 @@ class TestBricklinkCatalogService:
         assert len(results) == 10
 
     @pytest.mark.asyncio
-    async def test_search_sets_empty_results(self, bricklink_service, mock_oauth_client):
+    async def test_search_sets_empty_results(
+        self, bricklink_service, mock_oauth_client
+    ):
         """Test search with no results."""
         mock_response = {"data": []}
         mock_oauth_client.get.return_value = mock_response
@@ -441,7 +460,9 @@ class TestBricklinkCatalogService:
         assert "status 500" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_convert_exception_generic(self, bricklink_service, mock_oauth_client):
+    async def test_convert_exception_generic(
+        self, bricklink_service, mock_oauth_client
+    ):
         """Test that generic exceptions are converted to CatalogAPIError."""
         mock_oauth_client.get.side_effect = ValueError("Something went wrong")
 

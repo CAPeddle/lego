@@ -6,34 +6,37 @@ must implement. Allows swapping catalog providers without changing business logi
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
+
 from pydantic import BaseModel
 
 
 class SetSearchResult(BaseModel):
     """Result from searching for a set in a catalog."""
+
     set_no: str
     name: str
-    year: Optional[int] = None
-    theme: Optional[str] = None
-    num_parts: Optional[int] = None
-    image_url: Optional[str] = None
+    year: int | None = None
+    theme: str | None = None
+    num_parts: int | None = None
+    image_url: str | None = None
 
 
 class SetMetadata(BaseModel):
     """Detailed metadata about a LEGO set."""
+
     set_no: str
     name: str
-    year: Optional[int] = None
-    theme: Optional[str] = None
-    num_parts: Optional[int] = None
-    image_url: Optional[str] = None
-    weight: Optional[float] = None  # in grams
-    dimensions: Optional[dict] = None  # {"length": x, "width": y, "height": z}
+    year: int | None = None
+    theme: str | None = None
+    num_parts: int | None = None
+    image_url: str | None = None
+    weight: float | None = None  # in grams
+    dimensions: dict | None = None  # {"length": x, "width": y, "height": z}
 
 
 class InventoryPart(BaseModel):
     """A part in a set's inventory."""
+
     part_no: str
     color_id: int
     qty: int
@@ -50,7 +53,7 @@ class CatalogServiceInterface(ABC):
     """
 
     @abstractmethod
-    async def search_sets(self, query: str, limit: int = 20) -> List[SetSearchResult]:
+    async def search_sets(self, query: str, limit: int = 20) -> list[SetSearchResult]:
         """
         Search for sets by name or description.
 
@@ -85,7 +88,7 @@ class CatalogServiceInterface(ABC):
         pass
 
     @abstractmethod
-    async def fetch_set_inventory(self, set_no: str) -> List[InventoryPart]:
+    async def fetch_set_inventory(self, set_no: str) -> list[InventoryPart]:
         """
         Fetch the complete parts inventory for a set.
 

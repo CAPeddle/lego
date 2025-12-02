@@ -7,16 +7,16 @@ CatalogServiceInterface for interacting with Bricklink API v3.
 API Documentation: https://www.bricklink.com/v3/api.page
 """
 
-from typing import List, Optional
 import logging
-from cachetools import TTLCache
+
 import requests
+from cachetools import TTLCache
 
 from app.core.catalog_interface import (
     CatalogServiceInterface,
-    SetSearchResult,
-    SetMetadata,
     InventoryPart,
+    SetMetadata,
+    SetSearchResult,
 )
 from app.core.exceptions import (
     CatalogAPIError,
@@ -25,7 +25,7 @@ from app.core.exceptions import (
     CatalogRateLimitError,
     CatalogTimeoutError,
 )
-from app.infrastructure.oauth_client import OAuthHTTPClient, OAuthConfig
+from app.infrastructure.oauth_client import OAuthHTTPClient
 
 logger = logging.getLogger(__name__)
 
@@ -64,11 +64,10 @@ class BricklinkCatalogService(CatalogServiceInterface):
         # Cache for set inventory (keyed by set_no)
         # Inventory data is larger, so use smaller cache
         self.inventory_cache = TTLCache(
-            maxsize=max_cache_size // 2,
-            ttl=cache_ttl * 7  # 7 days
+            maxsize=max_cache_size // 2, ttl=cache_ttl * 7  # 7 days
         )
 
-    async def search_sets(self, query: str, limit: int = 20) -> List[SetSearchResult]:
+    async def search_sets(self, query: str, limit: int = 20) -> list[SetSearchResult]:
         """
         Search for sets in Bricklink catalog.
 
@@ -175,7 +174,7 @@ class BricklinkCatalogService(CatalogServiceInterface):
             logger.error(f"Failed to fetch metadata for {set_no}: {e}")
             raise self._convert_exception(e)
 
-    async def fetch_set_inventory(self, set_no: str) -> List[InventoryPart]:
+    async def fetch_set_inventory(self, set_no: str) -> list[InventoryPart]:
         """
         Fetch the complete parts inventory for a set.
 
@@ -206,7 +205,7 @@ class BricklinkCatalogService(CatalogServiceInterface):
             # Request includes parts breakdown
             params = {
                 "break_minifigs": "true",  # Break down minifigures into parts
-                "break_subsets": "true",   # Break down subsets
+                "break_subsets": "true",  # Break down subsets
             }
 
             response = await self.oauth_client.get(url, params=params)
@@ -269,17 +268,13 @@ class BricklinkCatalogService(CatalogServiceInterface):
             status_code = exc.response.status_code
 
             if status_code == 401 or status_code == 403:
-                return CatalogAuthError(
-                    f"Bricklink authentication failed: {exc}"
-                )
+                return CatalogAuthError(f"Bricklink authentication failed: {exc}")
             elif status_code == 404:
                 return CatalogNotFoundError(
                     f"Set not found in Bricklink catalog: {exc}"
                 )
             elif status_code == 429:
-                return CatalogRateLimitError(
-                    f"Bricklink rate limit exceeded: {exc}"
-                )
+                return CatalogRateLimitError(f"Bricklink rate limit exceeded: {exc}")
             else:
                 return CatalogAPIError(
                     f"Bricklink API error (status {status_code}): {exc}"

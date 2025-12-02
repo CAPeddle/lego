@@ -1,33 +1,39 @@
 import logging
-from fastapi import APIRouter, HTTPException, Depends
+
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from app.core.services import InventoryService
-from app.core.exceptions import SetNotFoundError, BricklinkAPIError
+
 from app.api.schemas import CreateSetResponse, LegoSetResponse
+from app.core.exceptions import BricklinkAPIError, SetNotFoundError
+from app.core.services import InventoryService
 from app.infrastructure.bricklink_client import BricklinkClient
 from app.infrastructure.db import (
-    SqliteSetsRepository,
     SqliteInventoryRepository,
+    SqliteSetsRepository,
     get_db,
 )
-from app.api.schemas import CreateSetResponse, LegoSetResponse
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
 
 class CreateSetRequest(BaseModel):
     set_no: str = Field(..., pattern=r"^[0-9A-Za-z-]{3,20}$")
     assembled: bool = False
 
+
 def get_bricklink_client() -> BricklinkClient:
     return BricklinkClient()
+
 
 def get_sets_repo(db: Session = Depends(get_db)) -> SqliteSetsRepository:
     return SqliteSetsRepository(db)
 
+
 def get_inventory_repo(db: Session = Depends(get_db)) -> SqliteInventoryRepository:
     return SqliteInventoryRepository(db)
+
 
 def get_inventory_service(
     sets_repo: SqliteSetsRepository = Depends(get_sets_repo),
@@ -35,6 +41,7 @@ def get_inventory_service(
     bricklink_client: BricklinkClient = Depends(get_bricklink_client),
 ) -> InventoryService:
     return InventoryService(inventory_repo, sets_repo, bricklink_client)
+
 
 @router.post("/", response_model=CreateSetResponse)
 async def add_set(

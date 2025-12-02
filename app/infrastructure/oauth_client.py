@@ -8,15 +8,16 @@ Not Bricklink-specific - just handles OAuth signing and requests.
 """
 
 import asyncio
-from typing import Dict, Any, Optional
+import logging
+from typing import Any
+
 from requests_oauthlib import OAuth1Session
 from tenacity import (
     retry,
+    retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception_type,
 )
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -52,12 +53,14 @@ class OAuthConfig:
         Raises:
             ValueError: If any credential is missing
         """
-        if not all([
-            self.consumer_key,
-            self.consumer_secret,
-            self.resource_owner_key,
-            self.resource_owner_secret,
-        ]):
+        if not all(
+            [
+                self.consumer_key,
+                self.consumer_secret,
+                self.resource_owner_key,
+                self.resource_owner_secret,
+            ]
+        ):
             raise ValueError("All OAuth credentials must be provided")
 
 
@@ -105,9 +108,9 @@ class OAuthHTTPClient:
     async def get(
         self,
         url: str,
-        params: Optional[Dict[str, Any]] = None,
-        headers: Optional[Dict[str, str]] = None,
-    ) -> Dict[str, Any]:
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         """
         Make an authenticated GET request.
 
@@ -155,10 +158,10 @@ class OAuthHTTPClient:
     async def post(
         self,
         url: str,
-        data: Optional[Dict[str, Any]] = None,
-        json: Optional[Dict[str, Any]] = None,
-        headers: Optional[Dict[str, str]] = None,
-    ) -> Dict[str, Any]:
+        data: dict[str, Any] | None = None,
+        json: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         """
         Make an authenticated POST request.
 

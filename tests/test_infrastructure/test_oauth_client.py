@@ -4,8 +4,9 @@ Unit tests for the OAuth 1.0a HTTP client.
 Tests OAuth configuration, request signing, retries, and error handling.
 """
 
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import Mock, patch, AsyncMock
 from requests_oauthlib import OAuth1Session
 
 from app.infrastructure.oauth_client import OAuthConfig, OAuthHTTPClient
@@ -82,7 +83,7 @@ class TestOAuthHTTPClient:
         expected_data = {"data": {"key": "value"}}
         mock_response = mock_oauth_response(expected_data, 200)
 
-        with patch.object(client.session, 'get', return_value=mock_response):
+        with patch.object(client.session, "get", return_value=mock_response):
             result = await client.get("https://api.example.com/test")
 
             assert result == expected_data
@@ -98,12 +99,12 @@ class TestOAuthHTTPClient:
 
         params = {"type": "SET", "limit": 10}
 
-        with patch.object(client.session, 'get', return_value=mock_response):
+        with patch.object(client.session, "get", return_value=mock_response):
             result = await client.get("https://api.example.com/items", params=params)
 
             assert result == expected_data
             call_args = client.session.get.call_args
-            assert call_args[1]['params'] == params
+            assert call_args[1]["params"] == params
 
     @pytest.mark.asyncio
     async def test_get_request_with_headers(self, oauth_config, mock_oauth_response):
@@ -115,12 +116,12 @@ class TestOAuthHTTPClient:
 
         headers = {"Accept": "application/json"}
 
-        with patch.object(client.session, 'get', return_value=mock_response):
+        with patch.object(client.session, "get", return_value=mock_response):
             result = await client.get("https://api.example.com/test", headers=headers)
 
             assert result == expected_data
             call_args = client.session.get.call_args
-            assert call_args[1]['headers'] == headers
+            assert call_args[1]["headers"] == headers
 
     @pytest.mark.asyncio
     async def test_get_request_http_error(self, oauth_config, mock_oauth_response):
@@ -131,7 +132,7 @@ class TestOAuthHTTPClient:
 
         mock_response = mock_oauth_response({"error": "Not found"}, 404)
 
-        with patch.object(client.session, 'get', return_value=mock_response):
+        with patch.object(client.session, "get", return_value=mock_response):
             with pytest.raises(requests.exceptions.HTTPError):
                 await client.get("https://api.example.com/notfound")
 
@@ -143,7 +144,7 @@ class TestOAuthHTTPClient:
         expected_data = {"data": {"created": True}}
         mock_response = mock_oauth_response(expected_data, 201)
 
-        with patch.object(client.session, 'post', return_value=mock_response):
+        with patch.object(client.session, "post", return_value=mock_response):
             result = await client.post("https://api.example.com/create")
 
             assert result == expected_data
@@ -159,12 +160,12 @@ class TestOAuthHTTPClient:
 
         json_data = {"name": "Test Set", "number": "12345"}
 
-        with patch.object(client.session, 'post', return_value=mock_response):
+        with patch.object(client.session, "post", return_value=mock_response):
             result = await client.post("https://api.example.com/create", json=json_data)
 
             assert result == expected_data
             call_args = client.session.post.call_args
-            assert call_args[1]['json'] == json_data
+            assert call_args[1]["json"] == json_data
 
     @pytest.mark.asyncio
     async def test_health_check_success(self, oauth_config, mock_oauth_response):
@@ -173,7 +174,7 @@ class TestOAuthHTTPClient:
 
         mock_response = mock_oauth_response({"status": "ok"}, 200)
 
-        with patch.object(client.session, 'get', return_value=mock_response):
+        with patch.object(client.session, "get", return_value=mock_response):
             result = await client.health_check("https://api.example.com/health")
 
             assert result is True
@@ -181,13 +182,12 @@ class TestOAuthHTTPClient:
     @pytest.mark.asyncio
     async def test_health_check_failure(self, oauth_config, mock_oauth_response):
         """Test health check with inaccessible endpoint."""
-        import requests
 
         client = OAuthHTTPClient(oauth_config)
 
         mock_response = mock_oauth_response({"error": "Service unavailable"}, 503)
 
-        with patch.object(client.session, 'get', return_value=mock_response):
+        with patch.object(client.session, "get", return_value=mock_response):
             result = await client.health_check("https://api.example.com/health")
 
             assert result is False
@@ -196,6 +196,6 @@ class TestOAuthHTTPClient:
         """Test that close() closes the underlying session."""
         client = OAuthHTTPClient(oauth_config)
 
-        with patch.object(client.session, 'close') as mock_close:
+        with patch.object(client.session, "close") as mock_close:
             client.close()
             mock_close.assert_called_once()
